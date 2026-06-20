@@ -1,7 +1,0 @@
-<map id="todo::PriorityChangeAction" name="todo::PriorityChangeAction">
-<area shape="rect" id="Node000001" title=" " alt="" coords="5,177,183,203"/>
-<area shape="rect" id="Node000002" href="$classtodo_1_1_action.html" title=" " alt="" coords="48,102,140,128"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="96,141,96,178,92,176,92,145"/>
-<area shape="rect" id="Node000003" href="$classtodo_1_1_model.html" title=" " alt="" coords="49,5,139,31"/>
-<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="95,44,97,102,91,101,93,49"/>
-</map>

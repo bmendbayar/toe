@@ -1,7 +1,0 @@
-<map id="todo::DescChangeAction" name="todo::DescChangeAction">
-<area shape="rect" id="Node000001" title=" " alt="" coords="5,177,173,203"/>
-<area shape="rect" id="Node000002" href="$classtodo_1_1_action.html" title=" " alt="" coords="43,102,135,128"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="91,141,91,178,87,176,87,145"/>
-<area shape="rect" id="Node000003" href="$classtodo_1_1_model.html" title=" " alt="" coords="44,5,134,31"/>
-<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="90,44,92,102,86,101,88,49"/>
-</map>

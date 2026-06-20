@@ -1,9 +1,0 @@
-<map id="todo::View" name="todo::View">
-<area shape="rect" id="Node000001" title=" " alt="" coords="147,5,230,31"/>
-<area shape="rect" id="Node000002" href="$classtodo_1_1_basic_view.html" title=" " alt="" coords="5,79,122,105"/>
-<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="157,39,86,81,84,76,152,38"/>
-<area shape="rect" id="Node000003" href="$classtodo_1_1_i_view.html" title=" " alt="" coords="145,79,232,105"/>
-<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="191,45,191,80,187,77,187,48"/>
-<area shape="rect" id="Node000004" href="$classtodo_1_1_vi_view.html" title=" " alt="" coords="257,79,352,105"/>
-<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="222,37,288,78,282,78,220,42"/>
-</map>
