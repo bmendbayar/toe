@@ -25,6 +25,15 @@ enum class Error : std::uint8_t
     // Outdent lifts a node to its grandparent's level; a root has no parent and
     // therefore cannot be outdented further.
     NoParent,
+
+    // set_description was called with an empty string_view. The description
+    // field requires at least one character; use a separate clear operation to
+    // remove an existing description.
+    EmptyDescription,
+
+    // set_description was called with a string longer than kMaxDescriptionBytes.
+    // The arena append is rejected so the old description (if any) is preserved.
+    DescriptionTooLong,
 };
 
 }  // namespace toe::core

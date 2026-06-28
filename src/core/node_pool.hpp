@@ -3,9 +3,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <optional>
+#include <string_view>
 #include <vector>
 
 #include "core/error.hpp"
+#include "core/fields.hpp"
 #include "core/task_id.hpp"
 
 namespace toe::core
@@ -93,6 +96,41 @@ public:
     // in it. Iterative (explicit stack), so arbitrarily deep subtrees are safe.
     [[nodiscard]] std::expected<void, Error> remove_subtree(TaskId id);
 
+    // --- Task fields --------------------------------------------------------
+
+    // Each getter rejects a stale handle with StaleHandle.
+    // Each setter rejects a stale handle with StaleHandle.
+
+    [[nodiscard]] std::expected<Status, Error> get_status(TaskId id) const;
+    [[nodiscard]] std::expected<void, Error> set_status(TaskId id, Status s);
+    // Apply cycle_status to the node's current status and store the result.
+    // Returns the new status.
+    [[nodiscard]] std::expected<Status, Error> advance_status(TaskId id);
+
+    [[nodiscard]] std::expected<Priority, Error> get_priority(TaskId id) const;
+    [[nodiscard]] std::expected<void, Error> set_priority(TaskId id, Priority p);
+    // Apply cycle_priority to the node's current priority and store the result.
+    // Returns the new priority.
+    [[nodiscard]] std::expected<Priority, Error> advance_priority(TaskId id);
+
+    // Returns std::nullopt when no due date has been set on the node.
+    [[nodiscard]] std::expected<std::optional<std::int64_t>, Error>
+    get_due_date(TaskId id) const;
+    // Pass std::nullopt to clear the due date.
+    [[nodiscard]] std::expected<void, Error>
+    set_due_date(TaskId id, std::optional<std::int64_t> date);
+
+    // Returns an empty string_view when no description has been set.
+    // The view is valid as long as the arena is not modified (i.e. no
+    // subsequent set_description calls on any node in this pool).
+    [[nodiscard]] std::expected<std::string_view, Error>
+    get_description(TaskId id) const;
+    // Appends `desc` to the arena and updates the node's DescSlice. Old arena
+    // bytes for this node are orphaned and compacted at serialization time.
+    // Rejects: StaleHandle, EmptyDescription, DescriptionTooLong.
+    [[nodiscard]] std::expected<void, Error>
+    set_description(TaskId id, std::string_view desc);
+
     // --- Tree inspection ----------------------------------------------------
 
     // Head of the root sibling chain, or an invalid handle for an empty forest.
@@ -155,6 +193,18 @@ private:
     std::vector<TaskId> parent_;
     std::vector<TaskId> first_child_;
     std::vector<TaskId> next_sibling_;
+
+    // Task field arrays — one entry per slot, indexed by TaskId::index.
+    // Default values are set on alloc (both growth and reuse paths).
+    std::vector<Status>        status_;    // default: Status::Todo
+    std::vector<Priority>      priority_;  // default: Priority::Low
+    std::vector<std::int64_t>  due_date_;  // default: kNoDueDate (no date set)
+    std::vector<DescSlice>     desc_;      // default: {0, 0} (no description)
+
+    // Append-only character buffer backing all description strings. Edits
+    // orphan old bytes and append new ones; compaction happens at save time.
+    // ALLOC: one growable buffer for all descriptions, amortised push_back.
+    std::vector<char> desc_arena_;
 
     // Head of the root sibling chain; invalid when the forest is empty.
     TaskId root_;

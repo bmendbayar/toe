@@ -12,6 +12,10 @@ NodePool::NodePool(const std::uint32_t reserve_slots)
     parent_.reserve(reserve_slots);
     first_child_.reserve(reserve_slots);
     next_sibling_.reserve(reserve_slots);
+    status_.reserve(reserve_slots);
+    priority_.reserve(reserve_slots);
+    due_date_.reserve(reserve_slots);
+    desc_.reserve(reserve_slots);
 }
 
 TaskId NodePool::allocate()
@@ -27,6 +31,11 @@ TaskId NodePool::allocate()
         parent_[index] = TaskId::invalid();
         first_child_[index] = TaskId::invalid();
         next_sibling_[index] = TaskId::invalid();
+        // Reset fields to defaults so reused slots never expose stale data.
+        status_[index]   = Status::Todo;
+        priority_[index] = Priority::Low;
+        due_date_[index] = kNoDueDate;
+        desc_[index]     = DescSlice{};
         return TaskId{.index = index, .generation = generation_[index]};
     }
 
@@ -36,6 +45,10 @@ TaskId NodePool::allocate()
     parent_.push_back(TaskId::invalid());
     first_child_.push_back(TaskId::invalid());
     next_sibling_.push_back(TaskId::invalid());
+    status_.push_back(Status::Todo);
+    priority_.push_back(Priority::Low);
+    due_date_.push_back(kNoDueDate);
+    desc_.push_back(DescSlice{});
     return TaskId{.index = index, .generation = 1};
 }
 
@@ -201,6 +214,132 @@ std::expected<void, Error> NodePool::remove_subtree(const TaskId id)
         assert(freed.has_value());
         (void)freed;
     }
+    return {};
+}
+
+// --- Task fields ------------------------------------------------------------
+
+std::expected<Status, Error> NodePool::get_status(const TaskId id) const
+{
+    if (!is_valid(id))
+    {
+        return std::unexpected(Error::StaleHandle);
+    }
+    return status_[id.index];
+}
+
+std::expected<void, Error> NodePool::set_status(const TaskId id, const Status s)
+{
+    if (!is_valid(id))
+    {
+        return std::unexpected(Error::StaleHandle);
+    }
+    status_[id.index] = s;
+    return {};
+}
+
+std::expected<Status, Error> NodePool::advance_status(const TaskId id)
+{
+    if (!is_valid(id))
+    {
+        return std::unexpected(Error::StaleHandle);
+    }
+    const Status next = cycle_status(status_[id.index]);
+    status_[id.index] = next;
+    return next;
+}
+
+std::expected<Priority, Error> NodePool::get_priority(const TaskId id) const
+{
+    if (!is_valid(id))
+    {
+        return std::unexpected(Error::StaleHandle);
+    }
+    return priority_[id.index];
+}
+
+std::expected<void, Error> NodePool::set_priority(const TaskId id, const Priority p)
+{
+    if (!is_valid(id))
+    {
+        return std::unexpected(Error::StaleHandle);
+    }
+    priority_[id.index] = p;
+    return {};
+}
+
+std::expected<Priority, Error> NodePool::advance_priority(const TaskId id)
+{
+    if (!is_valid(id))
+    {
+        return std::unexpected(Error::StaleHandle);
+    }
+    const Priority next = cycle_priority(priority_[id.index]);
+    priority_[id.index] = next;
+    return next;
+}
+
+std::expected<std::optional<std::int64_t>, Error>
+NodePool::get_due_date(const TaskId id) const
+{
+    if (!is_valid(id))
+    {
+        return std::unexpected(Error::StaleHandle);
+    }
+    const std::int64_t stored = due_date_[id.index];
+    if (stored == kNoDueDate)
+    {
+        return std::nullopt;
+    }
+    return stored;
+}
+
+std::expected<void, Error>
+NodePool::set_due_date(const TaskId id, const std::optional<std::int64_t> date)
+{
+    if (!is_valid(id))
+    {
+        return std::unexpected(Error::StaleHandle);
+    }
+    due_date_[id.index] = date.value_or(kNoDueDate);
+    return {};
+}
+
+std::expected<std::string_view, Error>
+NodePool::get_description(const TaskId id) const
+{
+    if (!is_valid(id))
+    {
+        return std::unexpected(Error::StaleHandle);
+    }
+    const DescSlice& sl = desc_[id.index];
+    if (sl.length == 0)
+    {
+        return std::string_view{};
+    }
+    return std::string_view{desc_arena_.data() + sl.offset, sl.length};
+}
+
+std::expected<void, Error>
+NodePool::set_description(const TaskId id, const std::string_view desc)
+{
+    if (!is_valid(id))
+    {
+        return std::unexpected(Error::StaleHandle);
+    }
+    if (desc.empty())
+    {
+        return std::unexpected(Error::EmptyDescription);
+    }
+    if (desc.size() > kMaxDescriptionBytes)
+    {
+        return std::unexpected(Error::DescriptionTooLong);
+    }
+    // Old arena bytes for this node are orphaned; compaction happens at save.
+    const auto offset = static_cast<std::uint32_t>(desc_arena_.size());
+    const auto length = static_cast<std::uint32_t>(desc.size());
+    desc_arena_.insert(desc_arena_.end(), desc.begin(), desc.end());
+    desc_[id.index] = DescSlice{.offset = offset, .length = length};
     return {};
 }
 

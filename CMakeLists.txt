@@ -50,6 +50,7 @@ include(GoogleTest)
 
 add_executable(toe_tests
     tests/core_tests.cpp
+    tests/fields_tests.cpp
 )
 target_compile_options(toe_tests PRIVATE ${TOE_WARNINGS})
 target_link_libraries(toe_tests PRIVATE
