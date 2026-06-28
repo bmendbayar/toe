@@ -1,4 +1,6 @@
+#include <array>
 #include <cstdint>
+#include <cstdio>
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/color.hpp>
 #include <string>
@@ -108,22 +110,118 @@ int task_depth(const core::NodePool &pool, core::TaskId id)
     return row;
 }
 
-ftxui::Element render(const core::NodePool &pool, const ViewState &state, const std::vector<core::TaskId> &visible)
+ftxui::Element render_calendar(const ViewState &state, std::int64_t now_epoch)
+{
+    using namespace ftxui;
+    using namespace std::chrono;
+
+    const auto sel_ymd = epoch_to_ymd(state.picker.view_epoch);
+    const year_month ym{sel_ymd.year(), sel_ymd.month()};
+    const MonthGrid grid = month_grid(ym);
+    const std::int64_t today_ep = today_epoch(now_epoch);
+    const std::int64_t sel_ep = floor_to_day(state.picker.view_epoch);
+
+    static constexpr std::array<std::string_view, 12> kMonthNames = {
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    };
+    const auto mi = static_cast<unsigned>(ym.month()) - 1;
+    char hdr[32];
+    std::snprintf(hdr, sizeof(hdr), "%s %d", kMonthNames[mi].data(), static_cast<int>(ym.year()));
+
+    Elements rows;
+    rows.push_back(text(hdr) | bold | center);
+    // Header row matches cell format: each cell is 3 chars (" XX")
+    rows.push_back(text(" Su Mo Tu We Th Fr Sa"));
+
+    // Seed the first week row with empty cells for days before the 1st
+    Elements week;
+    unsigned col = grid.first_weekday;
+    for (unsigned i = 0; i < col; ++i)
+    {
+        week.push_back(text("   "));
+    }
+
+    for (unsigned d = 1; d <= grid.days_in_month; ++d)
+    {
+        const year_month_day day_ymd{ym.year(), ym.month(), day{d}};
+        const std::int64_t day_ep = ymd_to_epoch(day_ymd);
+
+        char buf[4];
+        std::snprintf(buf, sizeof(buf), " %2u", d);
+        Element cell = text(std::string(buf));
+
+        if (day_ep == sel_ep)
+        {
+            cell = inverted(std::move(cell));
+        }
+        else if (day_ep == today_ep)
+        {
+            cell = bold(color(Color::GreenLight, std::move(cell)));
+        }
+
+        week.push_back(std::move(cell));
+
+        if (col == 6)
+        {
+            rows.push_back(hbox(std::move(week)));
+            week.clear();
+            col = 0;
+        }
+        else
+        {
+            ++col;
+        }
+    }
+    if (!week.empty())
+    {
+        rows.push_back(hbox(std::move(week)));
+    }
+
+    return vbox(std::move(rows)) | border;
+}
+
+ftxui::Element render(
+    const core::NodePool &pool,
+    const ViewState &state,
+    const std::vector<core::TaskId> &visible,
+    std::int64_t now_epoch
+)
 {
     using namespace ftxui;
 
+    Element task_list;
     if (visible.empty())
     {
-        return text("No tasks — press 'o' to create one.") | dim;
+        task_list = text("No tasks — press 'o' to create one.") | dim;
+    }
+    else
+    {
+        Elements rows;
+        rows.reserve(visible.size());
+        for (const core::TaskId id : visible)
+        {
+            rows.push_back(render_row(pool, state, id));
+        }
+        task_list = vbox(std::move(rows));
     }
 
-    Elements rows;
-    rows.reserve(visible.size());
-    for (const core::TaskId id : visible)
+    if (state.mode == Mode::DatePicker)
     {
-        rows.push_back(render_row(pool, state, id));
+        return hbox({std::move(task_list) | flex, render_calendar(state, now_epoch)});
     }
-    return vbox(std::move(rows));
+
+    return task_list;
 }
 
 ftxui::Element render_status_bar(const ViewState &state)
@@ -137,11 +235,21 @@ ftxui::Element render_status_bar(const ViewState &state)
         case Mode::Insert:
             if (state.edit_field == EditField::DueDate)
             {
-                return hbox({text(" DATE   ") | bold | color(Color::Cyan), text("  YYYY-MM-DD  "), text(state.edit_buffer), text("█") | blink});
+                return hbox(
+                    {text(" DATE   ") | bold | color(Color::Cyan),
+                     text("  YYYY-MM-DD  "),
+                     text(state.edit_buffer),
+                     text("█") | blink}
+                );
             }
             return hbox({text(" INSERT ") | bold | color(Color::BlueLight), text("  "), text(state.edit_buffer), text("█") | blink});
         case Mode::Command:
             return hbox({text(":"), text(state.cmd_buffer), text("█") | blink});
+        case Mode::DatePicker:
+            return hbox({
+                text(" PICK   ") | bold | color(Color::Magenta),
+                text("  h/l:day  j/k:week  [/]:month  t:today  Enter:set  d:clear  i:type  Esc:cancel"),
+            });
     }
     return text("");
 }

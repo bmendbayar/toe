@@ -177,11 +177,11 @@ EventResult handle_normal(ViewState &state, const std::vector<core::TaskId> &vis
         return {.consumed = true, .command = Command{CmdToggleDone{}}};
     }
 
-    // D - enter Insert mode to edit due date (pre-populated if one is set)
+    // D - open calendar date picker
     if (event == ftxui::Event::D)
     {
         reset_d();
-        return {.consumed = true, .command = Command{CmdBeginEditDueDate{}}};
+        return {.consumed = true, .command = Command{CmdBeginDatePicker{}}};
     }
 
     // d / dd - delete task (two-key sequence)
@@ -332,9 +332,99 @@ EventResult handle_command(ViewState &state, const ftxui::Event &event)
     return {.consumed = false, .command = std::nullopt};
 }
 
+EventResult handle_date_picker(ViewState &state, const ftxui::Event &event, std::int64_t now_seconds)
+{
+    // h / ArrowLeft - back 1 day
+    if (event == ftxui::Event::h || event == ftxui::Event::ArrowLeft)
+    {
+        state.picker.view_epoch = add_days(state.picker.view_epoch, -1);
+        return {.consumed = true, .command = std::nullopt};
+    }
+
+    // l / ArrowRight - forward 1 day
+    if (event == ftxui::Event::l || event == ftxui::Event::ArrowRight)
+    {
+        state.picker.view_epoch = add_days(state.picker.view_epoch, 1);
+        return {.consumed = true, .command = std::nullopt};
+    }
+
+    // j / ArrowDown - forward 1 week
+    if (event == ftxui::Event::j || event == ftxui::Event::ArrowDown)
+    {
+        state.picker.view_epoch = add_days(state.picker.view_epoch, 7);
+        return {.consumed = true, .command = std::nullopt};
+    }
+
+    // k / ArrowUp - back 1 week
+    if (event == ftxui::Event::k || event == ftxui::Event::ArrowUp)
+    {
+        state.picker.view_epoch = add_days(state.picker.view_epoch, -7);
+        return {.consumed = true, .command = std::nullopt};
+    }
+
+    // [ - back 1 month (with end-of-month clamping via add_months)
+    if (event == ftxui::Event::Character('['))
+    {
+        state.picker.view_epoch = add_months(state.picker.view_epoch, -1);
+        return {.consumed = true, .command = std::nullopt};
+    }
+
+    // ] - forward 1 month
+    if (event == ftxui::Event::Character(']'))
+    {
+        state.picker.view_epoch = add_months(state.picker.view_epoch, 1);
+        return {.consumed = true, .command = std::nullopt};
+    }
+
+    // t - jump to today
+    if (event == ftxui::Event::t)
+    {
+        state.picker.view_epoch = today_epoch(now_seconds);
+        return {.consumed = true, .command = std::nullopt};
+    }
+
+    // Enter - commit selected date
+    if (event == ftxui::Event::Return)
+    {
+        std::string date_text = format_due_date(state.picker.view_epoch);
+        state.mode = Mode::Normal;
+        return {.consumed = true, .command = Command{CmdCommitDueDate{.text = std::move(date_text)}}};
+    }
+
+    // d - clear date
+    if (event == ftxui::Event::d)
+    {
+        state.mode = Mode::Normal;
+        return {.consumed = true, .command = Command{CmdCommitDueDate{.text = ""}}};
+    }
+
+    // i - drop into typed/relative entry pre-filled with selected date
+    if (event == ftxui::Event::i)
+    {
+        state.edit_buffer = format_due_date(state.picker.view_epoch);
+        state.edit_field = EditField::DueDate;
+        state.mode = Mode::Insert;
+        return {.consumed = true, .command = std::nullopt};
+    }
+
+    // Esc - cancel picker, leave date unchanged
+    if (event == ftxui::Event::Escape)
+    {
+        state.mode = Mode::Normal;
+        return {.consumed = true, .command = std::nullopt};
+    }
+
+    return {.consumed = false, .command = std::nullopt};
+}
+
 // --- Public interface --------------------------------------------------
 
-EventResult process_event(ViewState &state, const std::vector<core::TaskId> &visible, const ftxui::Event &event)
+EventResult process_event(
+    ViewState &state,
+    const std::vector<core::TaskId> &visible,
+    const ftxui::Event &event,
+    std::int64_t now_seconds
+)
 {
     switch (state.mode)
     {
@@ -344,12 +434,19 @@ EventResult process_event(ViewState &state, const std::vector<core::TaskId> &vis
             return handle_insert(state, event);
         case Mode::Command:
             return handle_command(state, event);
+        case Mode::DatePicker:
+            return handle_date_picker(state, event, now_seconds);
     }
     return {.consumed = false, .command = std::nullopt};
 }
 
-std::expected<void, core::Error>
-apply_command(const Command &cmd, core::NodePool &pool, ViewState &state, const std::vector<core::TaskId> &visible)
+std::expected<void, core::Error> apply_command(
+    const Command &cmd,
+    core::NodePool &pool,
+    ViewState &state,
+    const std::vector<core::TaskId> &visible,
+    std::int64_t now_seconds
+)
 {
     return std::visit(
         [&]([[maybe_unused]] auto &&c) -> std::expected<void, core::Error> {
@@ -521,7 +618,7 @@ apply_command(const Command &cmd, core::NodePool &pool, ViewState &state, const 
                 return pool.set_description(state.cursor, c.text);
             }
 
-            if constexpr (std::is_same_v<T, CmdBeginEditDueDate>)
+            if constexpr (std::is_same_v<T, CmdBeginDatePicker>)
             {
                 if (!state.cursor.is_valid())
                 {
@@ -532,13 +629,10 @@ apply_command(const Command &cmd, core::NodePool &pool, ViewState &state, const 
                 {
                     return std::unexpected(date_result.error());
                 }
-                state.edit_buffer.clear();
-                if (date_result->has_value())
-                {
-                    state.edit_buffer = format_due_date(**date_result);
-                }
-                state.edit_field = EditField::DueDate;
-                state.mode = Mode::Insert;
+                state.picker.view_epoch = date_result->has_value()
+                                              ? **date_result
+                                              : today_epoch(now_seconds);
+                state.mode = Mode::DatePicker;
                 return {};
             }
 
@@ -552,10 +646,12 @@ apply_command(const Command &cmd, core::NodePool &pool, ViewState &state, const 
                 {
                     return pool.set_due_date(state.cursor, std::nullopt);
                 }
-                const auto epoch = parse_due_date(c.text);
+                // parse_date_input handles both absolute (YYYY-MM-DD) and relative
+                // (+3d, today, fri, etc.) so typed entry from picker's 'i' handoff works.
+                const auto epoch = parse_date_input(c.text, now_seconds);
                 if (!epoch)
                 {
-                    return {};  // invalid format — no-op, leave date unchanged
+                    return {};  // unrecognised format — no-op, leave date unchanged
                 }
                 return pool.set_due_date(state.cursor, *epoch);
             }

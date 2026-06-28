@@ -28,15 +28,25 @@ struct EventResult
 // switch, cursor move, fold) are applied directly to `state`; Core mutations
 // are returned as a Command for the caller to apply via apply_command.
 // Unconsumed events have consumed=false and leave `state` unchanged.
+// `now_seconds` is needed for DatePicker mode's 't' (today) key.
 [[nodiscard]] EventResult process_event(
-    ViewState &state, const std::vector<core::TaskId> &visible, const ftxui::Event &event
+    ViewState &state,
+    const std::vector<core::TaskId> &visible,
+    const ftxui::Event &event,
+    std::int64_t now_seconds = 0
 );
 
 // Execute a command against the node pool, updating `state` as a side-effect
 // (e.g. cursor after insert, mode after entering Insert).
 // CmdQuit / CmdSave / CmdSaveAndQuit are no-ops here; the app layer handles them.
+// `now_seconds` is forwarded to CmdBeginDatePicker (today seed) and
+// CmdCommitDueDate (relative-date parsing).
 [[nodiscard]] std::expected<void, core::Error> apply_command(
-    const Command &cmd, core::NodePool &pool, ViewState &state, const std::vector<core::TaskId> &visible
+    const Command &cmd,
+    core::NodePool &pool,
+    ViewState &state,
+    const std::vector<core::TaskId> &visible,
+    std::int64_t now_seconds = 0
 );
 
 }  // namespace toe::ui

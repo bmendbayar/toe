@@ -1,11 +1,11 @@
+#include <chrono>
 #include <cstdio>
-#include <string>
-#include <variant>
-
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/color.hpp>
+#include <string>
+#include <variant>
 
 #include "core/error.hpp"
 #include "core/node_pool.hpp"
@@ -46,8 +46,12 @@ int main()
     auto exit = screen.ExitLoopClosure();
 
     auto renderer = ftxui::Renderer([&] {
+        const auto now_epoch = std::chrono::duration_cast<std::chrono::seconds>(
+                                   std::chrono::system_clock::now().time_since_epoch()
+        )
+                                   .count();
         const auto visible = toe::ui::compute_visible(pool, state.folded);
-        auto body   = toe::ui::render(pool, state, visible);
+        auto body = toe::ui::render(pool, state, visible, now_epoch);
         auto status = toe::ui::render_status_bar(state);
         if (status_message.empty())
         {
@@ -63,8 +67,12 @@ int main()
     auto component = ftxui::CatchEvent(renderer, [&](const ftxui::Event &event) -> bool {
         status_message.clear();
 
+        const auto now_epoch = std::chrono::duration_cast<std::chrono::seconds>(
+                                   std::chrono::system_clock::now().time_since_epoch()
+        )
+                                   .count();
         const auto visible = toe::ui::compute_visible(pool, state.folded);
-        auto result        = toe::ui::process_event(state, visible, event);
+        auto result = toe::ui::process_event(state, visible, event, now_epoch);
         if (!result.consumed)
         {
             return false;
@@ -116,7 +124,7 @@ int main()
         }
         else
         {
-            if (auto r = toe::ui::apply_command(cmd, pool, state, visible); r)
+            if (auto r = toe::ui::apply_command(cmd, pool, state, visible, now_epoch); r)
             {
                 dirty = true;
             }

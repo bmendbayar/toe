@@ -14,6 +14,7 @@ enum class Mode : std::uint8_t
     Normal,
     Insert,
     Command,
+    DatePicker,
 };
 
 struct TaskIdHash
@@ -34,15 +35,21 @@ enum class EditField : std::uint8_t
     DueDate,
 };
 
+struct DatePickerState
+{
+    std::int64_t view_epoch = 0;  // selected day in the calendar grid
+};
+
 struct ViewState
 {
     Mode mode = Mode::Normal;
     EditField edit_field = EditField::Description;  // which field 'i'/D edits
-    core::TaskId cursor;      // focused task; invalid() = no focus
-    FoldSet folded;           // roots of collapsed subtrees
-    std::string edit_buffer;  // accumulator in Insert mode
-    std::string cmd_buffer;   // accumulator in Command mode
-    bool pending_d = false;   // 'd' pressed once; second 'd' fires CmdDeleteTask
+    core::TaskId cursor;                            // focused task; invalid() = no focus
+    FoldSet folded;                                 // roots of collapsed subtrees
+    std::string edit_buffer;                        // accumulator in Insert mode
+    std::string cmd_buffer;                         // accumulator in Command mode
+    bool pending_d = false;                         // 'd' pressed once; second 'd' fires CmdDeleteTask
+    DatePickerState picker;
 };
 
 }  // namespace toe::ui

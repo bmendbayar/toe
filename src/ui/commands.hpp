@@ -16,7 +16,7 @@ struct CmdToggleDone {};        // 'x' toggle Done <-> Todo
 struct CmdCyclePriority {};     // 'p'
 struct CmdCycleStatus {};       // 's'
 struct CmdCommitEdit { std::string text; };
-struct CmdBeginEditDueDate {};                // 'D' — enter Insert for due date field
+struct CmdBeginDatePicker {};                 // 'D' — open calendar date picker
 struct CmdCommitDueDate { std::string text; };  // Return in Insert/DueDate; empty = clear
 struct CmdQuit {};
 struct CmdForceQuit {};   // ':q!' — discard unsaved changes and quit
@@ -34,7 +34,7 @@ using Command = std::variant<
     CmdCyclePriority,
     CmdCycleStatus,
     CmdCommitEdit,
-    CmdBeginEditDueDate,
+    CmdBeginDatePicker,
     CmdCommitDueDate,
     CmdQuit,
     CmdForceQuit,

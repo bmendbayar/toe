@@ -8,6 +8,7 @@
 #include "core/node_pool.hpp"
 #include "core/task_id.hpp"
 #include "ui/commands.hpp"
+#include "ui/date_util.hpp"
 #include "ui/key_handler.hpp"
 #include "ui/view_state.hpp"
 
@@ -395,7 +396,7 @@ TEST(NormalMode, q_EmitsCmdQuit)
     EXPECT_TRUE(std::holds_alternative<CmdQuit>(*result.command));
 }
 
-TEST(NormalMode, D_EmitsCmdBeginEditDueDate)
+TEST(NormalMode, D_EmitsCmdBeginDatePicker)
 {
     NodePool pool;
     ViewState state;
@@ -405,7 +406,7 @@ TEST(NormalMode, D_EmitsCmdBeginEditDueDate)
 
     EXPECT_TRUE(result.consumed);
     ASSERT_TRUE(result.command.has_value());
-    EXPECT_TRUE(std::holds_alternative<CmdBeginEditDueDate>(*result.command));
+    EXPECT_TRUE(std::holds_alternative<CmdBeginDatePicker>(*result.command));
 }
 
 TEST(NormalMode, UnknownKey_IsNotConsumed)
@@ -834,7 +835,7 @@ TEST(ApplyCommand, Quit_IsNoOpOnPool)
     EXPECT_EQ(pool.live_count(), 0u);
 }
 
-TEST(ApplyCommand, BeginEditDueDate_SetsInsertModeAndDateEditField)
+TEST(ApplyCommand, BeginDatePicker_EntersDatePickerMode)
 {
     NodePool pool;
     const TaskId a = pool.add_root();
@@ -842,14 +843,14 @@ TEST(ApplyCommand, BeginEditDueDate_SetsInsertModeAndDateEditField)
     state.cursor = a;
     const auto vis = compute_visible(pool, state.folded);
 
-    ASSERT_TRUE(apply_command(Command{CmdBeginEditDueDate{}}, pool, state, vis).has_value());
+    // now_seconds=0: no date set, so picker seeds to today_epoch(0) = 0
+    ASSERT_TRUE(apply_command(Command{CmdBeginDatePicker{}}, pool, state, vis).has_value());
 
-    EXPECT_EQ(state.mode, Mode::Insert);
-    EXPECT_EQ(state.edit_field, EditField::DueDate);
-    EXPECT_TRUE(state.edit_buffer.empty());  // no date set yet
+    EXPECT_EQ(state.mode, Mode::DatePicker);
+    EXPECT_EQ(state.picker.view_epoch, today_epoch(0));
 }
 
-TEST(ApplyCommand, BeginEditDueDate_PrePopulatesBufferWhenDateSet)
+TEST(ApplyCommand, BeginDatePicker_SeedsPickerFromExistingDate)
 {
     NodePool pool;
     const TaskId a = pool.add_root();
@@ -861,9 +862,10 @@ TEST(ApplyCommand, BeginEditDueDate_PrePopulatesBufferWhenDateSet)
     state.cursor = a;
     const auto vis = compute_visible(pool, state.folded);
 
-    ASSERT_TRUE(apply_command(Command{CmdBeginEditDueDate{}}, pool, state, vis).has_value());
+    ASSERT_TRUE(apply_command(Command{CmdBeginDatePicker{}}, pool, state, vis).has_value());
 
-    EXPECT_EQ(state.edit_buffer, "2025-07-04");
+    EXPECT_EQ(state.mode, Mode::DatePicker);
+    EXPECT_EQ(state.picker.view_epoch, epoch);
 }
 
 TEST(ApplyCommand, CommitDueDate_ParsesAndStoresDate)
@@ -924,6 +926,245 @@ TEST(ApplyCommand, CommitDueDate_InvalidText_Noop)
     ASSERT_TRUE(date.has_value());
     ASSERT_TRUE(date->has_value());
     EXPECT_EQ(**date, std::int64_t{86400});
+}
+
+// --- DatePicker mode keymap ----------------------------------------------------------
+
+// Helper: epoch for a specific calendar date.
+static std::int64_t make_epoch(int y, unsigned m, unsigned d)
+{
+    using namespace std::chrono;
+    return ymd_to_epoch(year_month_day{year{y}, month{m}, day{d}});
+}
+
+TEST(DatePickerMode, H_MovesBackOneDay)
+{
+    NodePool pool;
+    ViewState state;
+    state.mode = Mode::DatePicker;
+    state.picker.view_epoch = make_epoch(2026, 7, 15);
+    const auto vis = compute_visible(pool, state.folded);
+
+    const auto result = process_event(state, vis, ftxui::Event::h);
+
+    EXPECT_TRUE(result.consumed);
+    EXPECT_FALSE(result.command.has_value());
+    EXPECT_EQ(state.picker.view_epoch, make_epoch(2026, 7, 14));
+}
+
+TEST(DatePickerMode, L_MovesForwardOneDay)
+{
+    NodePool pool;
+    ViewState state;
+    state.mode = Mode::DatePicker;
+    state.picker.view_epoch = make_epoch(2026, 7, 14);
+    const auto vis = compute_visible(pool, state.folded);
+
+    (void)process_event(state, vis, ftxui::Event::l);
+
+    EXPECT_EQ(state.picker.view_epoch, make_epoch(2026, 7, 15));
+}
+
+TEST(DatePickerMode, J_MovesForwardOneWeek)
+{
+    NodePool pool;
+    ViewState state;
+    state.mode = Mode::DatePicker;
+    state.picker.view_epoch = make_epoch(2026, 7, 1);
+    const auto vis = compute_visible(pool, state.folded);
+
+    (void)process_event(state, vis, ftxui::Event::j);
+
+    EXPECT_EQ(state.picker.view_epoch, make_epoch(2026, 7, 8));
+}
+
+TEST(DatePickerMode, K_MovesBackOneWeek)
+{
+    NodePool pool;
+    ViewState state;
+    state.mode = Mode::DatePicker;
+    state.picker.view_epoch = make_epoch(2026, 7, 8);
+    const auto vis = compute_visible(pool, state.folded);
+
+    (void)process_event(state, vis, ftxui::Event::k);
+
+    EXPECT_EQ(state.picker.view_epoch, make_epoch(2026, 7, 1));
+}
+
+TEST(DatePickerMode, BracketLeft_MovesBackOneMonth)
+{
+    NodePool pool;
+    ViewState state;
+    state.mode = Mode::DatePicker;
+    state.picker.view_epoch = make_epoch(2026, 7, 15);
+    const auto vis = compute_visible(pool, state.folded);
+
+    (void)process_event(state, vis, ftxui::Event::Character('['));
+
+    EXPECT_EQ(state.picker.view_epoch, make_epoch(2026, 6, 15));
+}
+
+TEST(DatePickerMode, BracketRight_MovesForwardOneMonth)
+{
+    NodePool pool;
+    ViewState state;
+    state.mode = Mode::DatePicker;
+    state.picker.view_epoch = make_epoch(2026, 6, 15);
+    const auto vis = compute_visible(pool, state.folded);
+
+    (void)process_event(state, vis, ftxui::Event::Character(']'));
+
+    EXPECT_EQ(state.picker.view_epoch, make_epoch(2026, 7, 15));
+}
+
+TEST(DatePickerMode, T_JumpsToToday)
+{
+    NodePool pool;
+    ViewState state;
+    state.mode = Mode::DatePicker;
+    state.picker.view_epoch = make_epoch(2020, 1, 1);
+    const auto vis = compute_visible(pool, state.folded);
+
+    // now_seconds points to a specific instant in July 2026
+    const std::int64_t now = make_epoch(2026, 7, 10) + 3600;  // July 10 + 1 hour offset
+    const auto result = process_event(state, vis, ftxui::Event::t, now);
+
+    EXPECT_TRUE(result.consumed);
+    EXPECT_FALSE(result.command.has_value());
+    EXPECT_EQ(state.picker.view_epoch, today_epoch(now));  // midnight of July 10
+}
+
+TEST(DatePickerMode, Enter_EmitsCmdCommitDueDateWithSelectedDate)
+{
+    NodePool pool;
+    ViewState state;
+    state.mode = Mode::DatePicker;
+    state.picker.view_epoch = make_epoch(2026, 7, 15);
+    const auto vis = compute_visible(pool, state.folded);
+
+    const auto result = process_event(state, vis, ftxui::Event::Return);
+
+    EXPECT_TRUE(result.consumed);
+    ASSERT_TRUE(result.command.has_value());
+    ASSERT_TRUE(std::holds_alternative<CmdCommitDueDate>(*result.command));
+    EXPECT_EQ(std::get<CmdCommitDueDate>(*result.command).text, "2026-07-15");
+    EXPECT_EQ(state.mode, Mode::Normal);
+}
+
+TEST(DatePickerMode, D_EmitsCmdCommitDueDateEmpty)
+{
+    NodePool pool;
+    ViewState state;
+    state.mode = Mode::DatePicker;
+    state.picker.view_epoch = make_epoch(2026, 7, 15);
+    const auto vis = compute_visible(pool, state.folded);
+
+    const auto result = process_event(state, vis, ftxui::Event::d);
+
+    EXPECT_TRUE(result.consumed);
+    ASSERT_TRUE(result.command.has_value());
+    ASSERT_TRUE(std::holds_alternative<CmdCommitDueDate>(*result.command));
+    EXPECT_TRUE(std::get<CmdCommitDueDate>(*result.command).text.empty());
+    EXPECT_EQ(state.mode, Mode::Normal);
+}
+
+TEST(DatePickerMode, Esc_ReturnsToNormal_NoCmdNoDateChange)
+{
+    NodePool pool;
+    ViewState state;
+    state.mode = Mode::DatePicker;
+    state.picker.view_epoch = make_epoch(2026, 7, 15);
+    const auto vis = compute_visible(pool, state.folded);
+
+    const auto result = process_event(state, vis, ftxui::Event::Escape);
+
+    EXPECT_TRUE(result.consumed);
+    EXPECT_FALSE(result.command.has_value());
+    EXPECT_EQ(state.mode, Mode::Normal);
+    EXPECT_EQ(state.picker.view_epoch, make_epoch(2026, 7, 15));  // unchanged
+}
+
+TEST(DatePickerMode, I_HandoffToInsert_PreFillsBuffer)
+{
+    NodePool pool;
+    ViewState state;
+    state.mode = Mode::DatePicker;
+    state.picker.view_epoch = make_epoch(2026, 7, 15);
+    const auto vis = compute_visible(pool, state.folded);
+
+    const auto result = process_event(state, vis, ftxui::Event::i);
+
+    EXPECT_TRUE(result.consumed);
+    EXPECT_FALSE(result.command.has_value());
+    EXPECT_EQ(state.mode, Mode::Insert);
+    EXPECT_EQ(state.edit_field, EditField::DueDate);
+    EXPECT_EQ(state.edit_buffer, "2026-07-15");
+}
+
+TEST(DatePickerMode, H_WrapsAcrossMonthBoundary)
+{
+    NodePool pool;
+    ViewState state;
+    state.mode = Mode::DatePicker;
+    state.picker.view_epoch = make_epoch(2026, 8, 1);  // Aug 1
+    const auto vis = compute_visible(pool, state.folded);
+
+    (void)process_event(state, vis, ftxui::Event::h);  // -1 day
+
+    EXPECT_EQ(state.picker.view_epoch, make_epoch(2026, 7, 31));  // Jul 31
+}
+
+TEST(DatePickerMode, H_WrapsAcrossYearBoundary)
+{
+    NodePool pool;
+    ViewState state;
+    state.mode = Mode::DatePicker;
+    state.picker.view_epoch = make_epoch(2026, 1, 1);  // Jan 1
+    const auto vis = compute_visible(pool, state.folded);
+
+    (void)process_event(state, vis, ftxui::Event::h);  // -1 day
+
+    EXPECT_EQ(state.picker.view_epoch, make_epoch(2025, 12, 31));  // Dec 31 prev year
+}
+
+TEST(DatePickerMode, L_SelectsLeapDay)
+{
+    NodePool pool;
+    ViewState state;
+    state.mode = Mode::DatePicker;
+    state.picker.view_epoch = make_epoch(2024, 2, 28);  // 2024 is a leap year
+    const auto vis = compute_visible(pool, state.folded);
+
+    (void)process_event(state, vis, ftxui::Event::l);  // +1 day
+
+    EXPECT_EQ(state.picker.view_epoch, make_epoch(2024, 2, 29));
+}
+
+TEST(DatePickerMode, BracketRight_ClampsEndOfMonth)
+{
+    NodePool pool;
+    ViewState state;
+    state.mode = Mode::DatePicker;
+    state.picker.view_epoch = make_epoch(2026, 1, 31);  // Jan 31
+    const auto vis = compute_visible(pool, state.folded);
+
+    (void)process_event(state, vis, ftxui::Event::Character(']'));  // +1 month
+
+    // Feb 2026 has 28 days (not a leap year), so Jan 31 + 1 month clamps to Feb 28
+    EXPECT_EQ(state.picker.view_epoch, make_epoch(2026, 2, 28));
+}
+
+TEST(DatePickerMode, BracketLeft_WrapsAcrossYear)
+{
+    NodePool pool;
+    ViewState state;
+    state.mode = Mode::DatePicker;
+    state.picker.view_epoch = make_epoch(2026, 1, 15);  // Jan 15
+    const auto vis = compute_visible(pool, state.folded);
+
+    (void)process_event(state, vis, ftxui::Event::Character('['));  // -1 month
+
+    EXPECT_EQ(state.picker.view_epoch, make_epoch(2025, 12, 15));  // Dec 15 prev year
 }
 
 }  // namespace toe::ui
