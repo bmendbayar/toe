@@ -35,16 +35,25 @@ target_include_directories(toe_core PUBLIC src)
 target_compile_features(toe_core PUBLIC cxx_std_23)
 target_compile_options(toe_core PRIVATE ${TOE_WARNINGS})
 
-add_executable(toe
-    src/app/main.cpp
+add_library(toe_ui STATIC
+    src/ui/key_handler.cpp
+    src/ui/renderer.cpp
 )
-target_compile_options(toe PRIVATE ${TOE_WARNINGS})
-target_link_libraries(toe PRIVATE
+target_include_directories(toe_ui PUBLIC src)
+target_compile_features(toe_ui PUBLIC cxx_std_23)
+target_compile_options(toe_ui PRIVATE ${TOE_WARNINGS})
+target_link_libraries(toe_ui PUBLIC
     toe_core
     ftxui::screen
     ftxui::dom
     ftxui::component
 )
+
+add_executable(toe
+    src/app/main.cpp
+)
+target_compile_options(toe PRIVATE ${TOE_WARNINGS})
+target_link_libraries(toe PRIVATE toe_ui)
 
 enable_testing()
 include(GoogleTest)
@@ -60,3 +69,13 @@ target_link_libraries(toe_tests PRIVATE
     GTest::gtest_main
 )
 gtest_discover_tests(toe_tests)
+
+add_executable(toe_ui_tests
+    tests/ui_tests.cpp
+)
+target_compile_options(toe_ui_tests PRIVATE ${TOE_WARNINGS})
+target_link_libraries(toe_ui_tests PRIVATE
+    toe_ui
+    GTest::gtest_main
+)
+gtest_discover_tests(toe_ui_tests)

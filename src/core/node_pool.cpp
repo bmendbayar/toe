@@ -106,6 +106,36 @@ std::expected<TaskId, Error> NodePool::add_sibling_after(const TaskId after)
     return id;
 }
 
+std::expected<TaskId, Error> NodePool::add_sibling_before(const TaskId before)
+{
+    if (!is_valid(before))
+    {
+        return std::unexpected(Error::StaleHandle);
+    }
+    const TaskId id = allocate();
+    const TaskId prev = prev_sibling(before);
+    if (prev.is_valid())
+    {
+        insert_after(prev, id);
+    }
+    else
+    {
+        // `before` is the head of its chain; make `id` the new head.
+        const TaskId par = parent_[before.index];
+        parent_[id.index] = par;
+        next_sibling_[id.index] = before;
+        if (par.is_valid())
+        {
+            first_child_[par.index] = id;
+        }
+        else
+        {
+            root_ = id;
+        }
+    }
+    return id;
+}
+
 // --- Tree mutation ----------------------------------------------------------
 
 std::expected<void, Error> NodePool::move(const TaskId id, const TaskId new_parent)

@@ -91,6 +91,10 @@ public:
     // "open below" primitive). Works for roots and inner nodes alike.
     [[nodiscard]] std::expected<TaskId, Error> add_sibling_after(TaskId after);
 
+    // Insert a new task immediately before `before` in its sibling chain (the
+    // "open above" primitive). Becomes the new head if `before` is first.
+    [[nodiscard]] std::expected<TaskId, Error> add_sibling_before(TaskId before);
+
     // --- Tree mutation ------------------------------------------------------
 
     // Reparent `id` under `new_parent`, appended as its last child. A

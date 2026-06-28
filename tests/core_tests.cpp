@@ -239,6 +239,50 @@ TEST(Tree, AddSiblingAfterRootExtendsRootChain)
     EXPECT_EQ(children_of(pool, TaskId::invalid()), (std::vector<TaskId>{a, b}));
 }
 
+TEST(Tree, AddSiblingBeforeInsertsInPlace)
+{
+    // A → B → C; insert before B → A → X → B → C
+    NodePool pool;
+    const TaskId a = pool.add_root();
+    const TaskId b = pool.add_sibling_after(a).value();
+    const TaskId c = pool.add_sibling_after(b).value();
+    const TaskId x = pool.add_sibling_before(b).value();
+
+    EXPECT_EQ(children_of(pool, TaskId::invalid()), (std::vector<TaskId>{a, x, b, c}));
+    EXPECT_FALSE(pool.parent(x).value().is_valid());
+}
+
+TEST(Tree, AddSiblingBeforeFirstRootBecomesNewRoot)
+{
+    NodePool pool;
+    const TaskId a = pool.add_root();
+    const TaskId b = pool.add_sibling_before(a).value();
+
+    EXPECT_EQ(pool.root(), b);
+    EXPECT_EQ(children_of(pool, TaskId::invalid()), (std::vector<TaskId>{b, a}));
+}
+
+TEST(Tree, AddSiblingBeforeFirstChildBecomesNewFirstChild)
+{
+    NodePool pool;
+    const TaskId parent = pool.add_root();
+    const TaskId c1 = pool.add_child(parent).value();
+    const TaskId c2 = pool.add_child(parent).value();
+    const TaskId x  = pool.add_sibling_before(c1).value();
+
+    EXPECT_EQ(pool.first_child(parent).value(), x);
+    EXPECT_EQ(children_of(pool, parent), (std::vector<TaskId>{x, c1, c2}));
+    EXPECT_EQ(pool.parent(x).value(), parent);
+}
+
+TEST(Tree, AddSiblingBeforeRejectsStaleHandle)
+{
+    NodePool pool;
+    const TaskId a = pool.add_root();
+    ASSERT_TRUE(pool.remove_subtree(a).has_value());
+    EXPECT_EQ(pool.add_sibling_before(a).error(), Error::StaleHandle);
+}
+
 TEST(Tree, FlattenIsDepthFirstPreOrder)
 {
     // root: A(A1, A2), B  -> A, A1, A2, B
