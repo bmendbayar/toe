@@ -139,4 +139,335 @@ TEST(NodePool, ManyHandlesRemainIndependentlyValid)
     EXPECT_EQ(pool.live_count(), 50u);
 }
 
+// --- LCRS tree ----------------------------------------------------------
+
+// Children of `parent` in sibling order; an invalid `parent` walks the roots.
+std::vector<TaskId> children_of(const NodePool &pool, const TaskId parent)
+{
+    std::vector<TaskId> out;
+    TaskId cur = parent.is_valid() ? pool.first_child(parent).value() : pool.root();
+    for (; cur.is_valid(); cur = pool.next_sibling(cur).value())
+    {
+        out.push_back(cur);
+    }
+    return out;
+}
+
+TEST(Tree, EmptyForestHasNoRoot)
+{
+    const NodePool pool;
+    EXPECT_FALSE(pool.root().is_valid());
+    EXPECT_TRUE(pool.flatten().empty());
+}
+
+TEST(Tree, AddRootBecomesRootWithNoLinks)
+{
+    NodePool pool;
+    const TaskId r = pool.add_root();
+
+    EXPECT_EQ(pool.root(), r);
+    EXPECT_FALSE(pool.parent(r).value().is_valid());
+    EXPECT_FALSE(pool.first_child(r).value().is_valid());
+    EXPECT_FALSE(pool.next_sibling(r).value().is_valid());
+    EXPECT_EQ(pool.flatten(), std::vector<TaskId>{r});
+}
+
+TEST(Tree, RootsFormSiblingChainInInsertionOrder)
+{
+    NodePool pool;
+    const TaskId a = pool.add_root();
+    const TaskId b = pool.add_root();
+    const TaskId c = pool.add_root();
+
+    EXPECT_EQ(pool.root(), a);
+    EXPECT_EQ(children_of(pool, TaskId::invalid()), (std::vector<TaskId>{a, b, c}));
+    for (const TaskId r : {a, b, c})
+    {
+        EXPECT_FALSE(pool.parent(r).value().is_valid());
+    }
+}
+
+TEST(Tree, AddChildAppendsPreservingOrder)
+{
+    NodePool pool;
+    const TaskId root = pool.add_root();
+    const TaskId c0 = pool.add_child(root).value();
+    const TaskId c1 = pool.add_child(root).value();
+    const TaskId c2 = pool.add_child(root).value();
+
+    EXPECT_EQ(pool.first_child(root).value(), c0);
+    EXPECT_EQ(children_of(pool, root), (std::vector<TaskId>{c0, c1, c2}));
+    for (const TaskId c : {c0, c1, c2})
+    {
+        EXPECT_EQ(pool.parent(c).value(), root);
+    }
+}
+
+TEST(Tree, AddChildRejectsStaleParent)
+{
+    NodePool pool;
+    const TaskId root = pool.add_root();
+    ASSERT_TRUE(pool.remove_subtree(root).has_value());
+
+    const auto result = pool.add_child(root);
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error(), Error::StaleHandle);
+}
+
+TEST(Tree, AddSiblingAfterInsertsInPlace)
+{
+    NodePool pool;
+    const TaskId root = pool.add_root();
+    const TaskId a = pool.add_child(root).value();
+    const TaskId c = pool.add_child(root).value();
+
+    // Insert b between a and c rather than at the tail.
+    const TaskId b = pool.add_sibling_after(a).value();
+
+    EXPECT_EQ(children_of(pool, root), (std::vector<TaskId>{a, b, c}));
+    EXPECT_EQ(pool.parent(b).value(), root);
+}
+
+TEST(Tree, AddSiblingAfterRootExtendsRootChain)
+{
+    NodePool pool;
+    const TaskId a = pool.add_root();
+    const TaskId b = pool.add_sibling_after(a).value();
+
+    EXPECT_EQ(pool.root(), a);
+    EXPECT_FALSE(pool.parent(b).value().is_valid());
+    EXPECT_EQ(children_of(pool, TaskId::invalid()), (std::vector<TaskId>{a, b}));
+}
+
+TEST(Tree, FlattenIsDepthFirstPreOrder)
+{
+    // root: A(A1, A2), B  -> A, A1, A2, B
+    NodePool pool;
+    const TaskId a = pool.add_root();
+    const TaskId b = pool.add_root();
+    const TaskId a1 = pool.add_child(a).value();
+    const TaskId a2 = pool.add_child(a).value();
+
+    EXPECT_EQ(pool.flatten(), (std::vector<TaskId>{a, a1, a2, b}));
+}
+
+TEST(Tree, MoveReparentsAsLastChild)
+{
+    NodePool pool;
+    const TaskId a = pool.add_root();
+    const TaskId b = pool.add_root();
+    const TaskId b_child = pool.add_child(b).value();
+
+    ASSERT_TRUE(pool.move(a, b).has_value());
+
+    EXPECT_EQ(pool.root(), b);  // a is no longer a root
+    EXPECT_EQ(pool.parent(a).value(), b);
+    EXPECT_EQ(children_of(pool, b), (std::vector<TaskId>{b_child, a}));
+}
+
+TEST(Tree, MoveToInvalidParentMakesItARoot)
+{
+    NodePool pool;
+    const TaskId root = pool.add_root();
+    const TaskId child = pool.add_child(root).value();
+
+    ASSERT_TRUE(pool.move(child, TaskId::invalid()).has_value());
+
+    EXPECT_FALSE(pool.parent(child).value().is_valid());
+    EXPECT_FALSE(pool.first_child(root).value().is_valid());
+    EXPECT_EQ(children_of(pool, TaskId::invalid()), (std::vector<TaskId>{root, child}));
+}
+
+TEST(Tree, MoveUnderSelfIsRejected)
+{
+    NodePool pool;
+    const TaskId a = pool.add_root();
+
+    const auto result = pool.move(a, a);
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error(), Error::WouldCreateCycle);
+}
+
+TEST(Tree, MoveUnderOwnDescendantIsRejected)
+{
+    NodePool pool;
+    const TaskId a = pool.add_root();
+    const TaskId b = pool.add_child(a).value();
+    const TaskId c = pool.add_child(b).value();
+
+    // a -> b -> c; moving a under c would splice a cycle.
+    const auto result = pool.move(a, c);
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error(), Error::WouldCreateCycle);
+
+    // The forest must be untouched by the rejected move.
+    EXPECT_EQ(pool.flatten(), (std::vector<TaskId>{a, b, c}));
+}
+
+TEST(Tree, MoveRejectsStaleHandles)
+{
+    NodePool pool;
+    const TaskId a = pool.add_root();
+    const TaskId b = pool.add_root();
+    ASSERT_TRUE(pool.remove_subtree(b).has_value());
+
+    EXPECT_EQ(pool.move(b, a).error(), Error::StaleHandle);
+    EXPECT_EQ(pool.move(a, b).error(), Error::StaleHandle);
+}
+
+TEST(Tree, IndentMakesNodeChildOfPreviousSibling)
+{
+    NodePool pool;
+    const TaskId root = pool.add_root();
+    const TaskId a = pool.add_child(root).value();
+    const TaskId b = pool.add_child(root).value();
+
+    ASSERT_TRUE(pool.indent(b).has_value());
+
+    EXPECT_EQ(pool.parent(b).value(), a);
+    EXPECT_EQ(children_of(pool, root), (std::vector<TaskId>{a}));
+    EXPECT_EQ(children_of(pool, a), (std::vector<TaskId>{b}));
+}
+
+TEST(Tree, IndentFirstSiblingIsRejected)
+{
+    NodePool pool;
+    const TaskId root = pool.add_root();
+    const TaskId a = pool.add_child(root).value();
+
+    const auto result = pool.indent(a);
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error(), Error::NoPreviousSibling);
+}
+
+TEST(Tree, OutdentLiftsAfterFormerParent)
+{
+    NodePool pool;
+    const TaskId root = pool.add_root();
+    const TaskId p = pool.add_child(root).value();
+    const TaskId q = pool.add_child(root).value();  // p's following sibling
+    const TaskId child = pool.add_child(p).value();
+
+    ASSERT_TRUE(pool.outdent(child).has_value());
+
+    // child rises to root's children, placed immediately after p (before q).
+    EXPECT_EQ(pool.parent(child).value(), root);
+    EXPECT_EQ(children_of(pool, root), (std::vector<TaskId>{p, child, q}));
+    EXPECT_FALSE(pool.first_child(p).value().is_valid());
+}
+
+TEST(Tree, OutdentToRootLevel)
+{
+    NodePool pool;
+    const TaskId root = pool.add_root();
+    const TaskId child = pool.add_child(root).value();
+
+    ASSERT_TRUE(pool.outdent(child).has_value());
+
+    EXPECT_FALSE(pool.parent(child).value().is_valid());
+    EXPECT_EQ(children_of(pool, TaskId::invalid()), (std::vector<TaskId>{root, child}));
+}
+
+TEST(Tree, OutdentRootIsRejected)
+{
+    NodePool pool;
+    const TaskId root = pool.add_root();
+
+    const auto result = pool.outdent(root);
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error(), Error::NoParent);
+}
+
+TEST(Tree, RemoveSingleNodeEmptiesForest)
+{
+    NodePool pool;
+    const TaskId root = pool.add_root();
+
+    ASSERT_TRUE(pool.remove_subtree(root).has_value());
+    EXPECT_FALSE(pool.root().is_valid());
+    EXPECT_EQ(pool.live_count(), 0u);
+    EXPECT_FALSE(pool.is_valid(root));
+}
+
+TEST(Tree, RemoveSubtreeReclaimsAllDescendants)
+{
+    NodePool pool;
+    const TaskId root = pool.add_root();
+    const TaskId keep = pool.add_child(root).value();
+    const TaskId drop = pool.add_child(root).value();
+    const TaskId d0 = pool.add_child(drop).value();
+    const TaskId d1 = pool.add_child(drop).value();
+    const TaskId d00 = pool.add_child(d0).value();
+
+    ASSERT_TRUE(pool.remove_subtree(drop).has_value());
+
+    // The whole drop subtree is gone; every handle into it is now stale.
+    for (const TaskId gone : {drop, d0, d1, d00})
+    {
+        EXPECT_FALSE(pool.is_valid(gone));
+    }
+    // The rest of the forest is intact and unlinked from the removed subtree.
+    EXPECT_TRUE(pool.is_valid(root));
+    EXPECT_TRUE(pool.is_valid(keep));
+    EXPECT_EQ(children_of(pool, root), (std::vector<TaskId>{keep}));
+    EXPECT_EQ(pool.flatten(), (std::vector<TaskId>{root, keep}));
+    EXPECT_EQ(pool.live_count(), 2u);
+}
+
+TEST(Tree, RemoveSubtreeRejectsStaleHandle)
+{
+    NodePool pool;
+    const TaskId root = pool.add_root();
+    ASSERT_TRUE(pool.remove_subtree(root).has_value());
+
+    const auto result = pool.remove_subtree(root);
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error(), Error::StaleHandle);
+}
+
+TEST(Tree, RemovedSlotsAreRecycledWithoutAliasing)
+{
+    NodePool pool;
+    const TaskId root = pool.add_root();
+    const TaskId child = pool.add_child(root).value();
+    ASSERT_TRUE(pool.remove_subtree(root).has_value());
+    ASSERT_EQ(pool.live_count(), 0u);
+
+    // Reuse must hand back the same slots at a bumped generation; the old
+    // handles stay stale rather than aliasing the new nodes.
+    const TaskId reused = pool.add_root();
+    EXPECT_FALSE(pool.is_valid(root));
+    EXPECT_FALSE(pool.is_valid(child));
+    EXPECT_TRUE(pool.is_valid(reused));
+    EXPECT_TRUE(reused == root || reused == child || reused.index == root.index || reused.index == child.index);
+    EXPECT_NE(reused, root);
+    EXPECT_NE(reused, child);
+}
+
+// The whole point of the iterative design: user-controlled depth must not
+// touch the native call stack. A recursive implementation overflows here.
+TEST(Tree, DeepNestingTraversesAndDeletesWithoutStackOverflow)
+{
+    constexpr int kDepth = 200'000;
+    NodePool pool{kDepth + 1};
+
+    const TaskId root = pool.add_root();
+    TaskId cur = root;
+    for (int i = 0; i < kDepth; ++i)
+    {
+        cur = pool.add_child(cur).value();
+    }
+    EXPECT_EQ(pool.live_count(), static_cast<std::size_t>(kDepth) + 1);
+
+    // Iterative flatten must visit every level.
+    const std::vector<TaskId> order = pool.flatten();
+    EXPECT_EQ(order.size(), static_cast<std::size_t>(kDepth) + 1);
+    EXPECT_EQ(order.front(), root);
+
+    // Iterative removal must reclaim the whole chain, no recursion.
+    ASSERT_TRUE(pool.remove_subtree(root).has_value());
+    EXPECT_EQ(pool.live_count(), 0u);
+    EXPECT_FALSE(pool.root().is_valid());
+}
+
 }  // namespace toe::core
