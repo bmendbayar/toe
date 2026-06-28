@@ -29,6 +29,7 @@ set(TOE_WARNINGS -Wall -Wextra -Werror)
 
 add_library(toe_core STATIC
     src/core/node_pool.cpp
+    src/core/serialization.cpp
 )
 target_include_directories(toe_core PUBLIC src)
 target_compile_features(toe_core PUBLIC cxx_std_23)
@@ -51,6 +52,7 @@ include(GoogleTest)
 add_executable(toe_tests
     tests/core_tests.cpp
     tests/fields_tests.cpp
+    tests/serialization_tests.cpp
 )
 target_compile_options(toe_tests PRIVATE ${TOE_WARNINGS})
 target_link_libraries(toe_tests PRIVATE

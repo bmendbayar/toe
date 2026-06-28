@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <expected>
 #include <optional>
+#include <span>
 #include <string_view>
 #include <vector>
 
@@ -13,6 +14,15 @@
 
 namespace toe::core
 {
+
+class NodePool;
+
+// Serialization lives in serialization.{hpp,cpp} but needs raw access to the
+// parallel arrays and free-list scalars to blit/restore them. Declared here so
+// the two free functions can be granted friendship below; see serialization.hpp
+// for the contract.
+[[nodiscard]] std::vector<std::byte> serialize(const NodePool &pool);
+[[nodiscard]] std::expected<NodePool, Error> deserialize(std::span<const std::byte> bytes);
 
 // Structure-of-Arrays slot map (a pool with generational handles) that owns
 // task slots and hands out stable TaskId handles. Unlike a bump/region arena,
@@ -39,6 +49,11 @@ namespace toe::core
 // cannot overflow the call stack.
 class NodePool
 {
+    // Persistence reaches past the public API to snapshot and restore the raw
+    // SoA arrays and free-list state; the format logic stays out of this class.
+    friend std::vector<std::byte> serialize(const NodePool &pool);
+    friend std::expected<NodePool, Error> deserialize(std::span<const std::byte> bytes);
+
 public:
     NodePool() = default;
 
@@ -196,10 +211,10 @@ private:
 
     // Task field arrays — one entry per slot, indexed by TaskId::index.
     // Default values are set on alloc (both growth and reuse paths).
-    std::vector<Status>        status_;    // default: Status::Todo
-    std::vector<Priority>      priority_;  // default: Priority::Low
-    std::vector<std::int64_t>  due_date_;  // default: kNoDueDate (no date set)
-    std::vector<DescSlice>     desc_;      // default: {0, 0} (no description)
+    std::vector<Status> status_;          // default: Status::Todo
+    std::vector<Priority> priority_;      // default: Priority::Low
+    std::vector<std::int64_t> due_date_;  // default: kNoDueDate (no date set)
+    std::vector<DescSlice> desc_;         // default: {0, 0} (no description)
 
     // Append-only character buffer backing all description strings. Edits
     // orphan old bytes and append new ones; compaction happens at save time.

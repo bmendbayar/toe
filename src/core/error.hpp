@@ -34,6 +34,27 @@ enum class Error : std::uint8_t
     // set_description was called with a string longer than kMaxDescriptionBytes.
     // The arena append is rejected so the old description (if any) is preserved.
     DescriptionTooLong,
+
+    // The serialized blob does not begin with the expected 4-byte magic. The
+    // file is not a toe save (or its first bytes are clobbered).
+    BadMagic,
+
+    // The magic matched but the version field names a format this build does
+    // not understand. Refused rather than misread under the wrong layout.
+    UnsupportedVersion,
+
+    // The blob ended before a declared field/array could be fully read: the
+    // header promises more bytes than the buffer holds. A short/cut-off file.
+    TruncatedData,
+
+    // The blob is the right length but internally inconsistent: a stored handle
+    // or description slice points out of range, the free list is malformed, an
+    // enum is out of range, or trailing bytes remain. Refused, never trusted.
+    CorruptData,
+
+    // A filesystem operation (open/read/write/create-dir) failed. Distinct from
+    // a malformed blob: the bytes were never the problem.
+    IoError,
 };
 
 }  // namespace toe::core
