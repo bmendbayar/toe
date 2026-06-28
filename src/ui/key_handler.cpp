@@ -57,7 +57,7 @@ compute_visible(const core::NodePool &pool, const FoldSet &folded)
     return static_cast<std::size_t>(it - visible.begin());
 }
 
-EventResult handle_normal(ViewState &state, const std::vector<core::TaskId> &visible, const ftxui::Event &event)
+EventResult handle_normal(ViewState &state, const std::vector<core::TaskId> &visible, const ftxui::Event &event, std::int64_t now_seconds)
 {
     const auto reset_d = [&] { state.pending_d = false; };
 
@@ -226,6 +226,39 @@ EventResult handle_normal(ViewState &state, const std::vector<core::TaskId> &vis
         return {.consumed = true, .command = Command{CmdQuit{}}};
     }
 
+    // T - toggle between Tree and Timeline view
+    if (event == ftxui::Event::T)
+    {
+        reset_d();
+        if (state.view_mode == ViewMode::Tree)
+        {
+            state.view_mode = ViewMode::Timeline;
+            state.timeline_start_epoch = today_epoch(now_seconds);
+        }
+        else
+        {
+            state.view_mode = ViewMode::Tree;
+        }
+        return {.consumed = true, .command = std::nullopt};
+    }
+
+    // [ / ] - scroll timeline window when in Timeline view
+    if (state.view_mode == ViewMode::Timeline)
+    {
+        if (event == ftxui::Event::Character('['))
+        {
+            reset_d();
+            state.timeline_start_epoch = add_days(state.timeline_start_epoch, -7);
+            return {.consumed = true, .command = std::nullopt};
+        }
+        if (event == ftxui::Event::Character(']'))
+        {
+            reset_d();
+            state.timeline_start_epoch = add_days(state.timeline_start_epoch, 7);
+            return {.consumed = true, .command = std::nullopt};
+        }
+    }
+
     // Esc - cancel pending 'd' sequence
     if (event == ftxui::Event::Escape)
     {
@@ -279,7 +312,7 @@ EventResult handle_insert(ViewState &state, const ftxui::Event &event)
     return {.consumed = false, .command = std::nullopt};
 }
 
-EventResult handle_command(ViewState &state, const ftxui::Event &event)
+EventResult handle_command(ViewState &state, const ftxui::Event &event, std::int64_t now_seconds)
 {
     if (event == ftxui::Event::Escape)
     {
@@ -310,6 +343,15 @@ EventResult handle_command(ViewState &state, const ftxui::Event &event)
         else if (cmd == "q!")
         {
             command = Command{CmdForceQuit{}};
+        }
+        else if (cmd == "timeline")
+        {
+            state.view_mode = ViewMode::Timeline;
+            state.timeline_start_epoch = today_epoch(now_seconds);
+        }
+        else if (cmd == "tree")
+        {
+            state.view_mode = ViewMode::Tree;
         }
         return {.consumed = true, .command = std::move(command)};
     }
@@ -429,11 +471,11 @@ EventResult process_event(
     switch (state.mode)
     {
         case Mode::Normal:
-            return handle_normal(state, visible, event);
+            return handle_normal(state, visible, event, now_seconds);
         case Mode::Insert:
             return handle_insert(state, event);
         case Mode::Command:
-            return handle_command(state, event);
+            return handle_command(state, event, now_seconds);
         case Mode::DatePicker:
             return handle_date_picker(state, event, now_seconds);
     }

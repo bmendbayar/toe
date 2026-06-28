@@ -1167,4 +1167,124 @@ TEST(DatePickerMode, BracketLeft_WrapsAcrossYear)
     EXPECT_EQ(state.picker.view_epoch, make_epoch(2025, 12, 15));  // Dec 15 prev year
 }
 
+// --- NormalMode: timeline view toggle (T key) --------------------------------
+
+TEST(NormalMode, T_SwitchesToTimeline)
+{
+    NodePool pool;
+    ViewState state;
+    const auto vis = compute_visible(pool, state.folded);
+    constexpr std::int64_t kNow = 1'000'000;  // arbitrary "now"
+
+    const auto result = process_event(state, vis, ftxui::Event::T, kNow);
+
+    EXPECT_TRUE(result.consumed);
+    EXPECT_FALSE(result.command.has_value());
+    EXPECT_EQ(state.view_mode, ViewMode::Timeline);
+    EXPECT_EQ(state.timeline_start_epoch, today_epoch(kNow));
+}
+
+TEST(NormalMode, T_TogglesBackToTree)
+{
+    NodePool pool;
+    ViewState state;
+    state.view_mode = ViewMode::Timeline;
+    const auto vis = compute_visible(pool, state.folded);
+
+    const auto result = process_event(state, vis, ftxui::Event::T, 0);
+
+    EXPECT_TRUE(result.consumed);
+    EXPECT_EQ(state.view_mode, ViewMode::Tree);
+}
+
+// --- NormalMode: timeline scroll ([/] keys) ----------------------------------
+
+TEST(NormalMode, BracketLeft_ScrollsTimelineBack)
+{
+    NodePool pool;
+    ViewState state;
+    state.view_mode = ViewMode::Timeline;
+    state.timeline_start_epoch = 7 * 86400;  // day 7
+    const auto vis = compute_visible(pool, state.folded);
+
+    const auto result = process_event(state, vis, ftxui::Event::Character('['));
+
+    EXPECT_TRUE(result.consumed);
+    EXPECT_EQ(state.timeline_start_epoch, 0);  // day 7 - 7 = day 0
+}
+
+TEST(NormalMode, BracketRight_ScrollsTimelineForward)
+{
+    NodePool pool;
+    ViewState state;
+    state.view_mode = ViewMode::Timeline;
+    state.timeline_start_epoch = 0;
+    const auto vis = compute_visible(pool, state.folded);
+
+    const auto result = process_event(state, vis, ftxui::Event::Character(']'));
+
+    EXPECT_TRUE(result.consumed);
+    EXPECT_EQ(state.timeline_start_epoch, 7 * 86400);
+}
+
+TEST(NormalMode, BracketLeft_InTreeMode_IsNotConsumed)
+{
+    NodePool pool;
+    ViewState state;
+    // view_mode defaults to Tree
+    const auto vis = compute_visible(pool, state.folded);
+
+    const auto result = process_event(state, vis, ftxui::Event::Character('['));
+
+    EXPECT_FALSE(result.consumed);
+}
+
+TEST(NormalMode, BracketRight_InTreeMode_IsNotConsumed)
+{
+    NodePool pool;
+    ViewState state;
+    const auto vis = compute_visible(pool, state.folded);
+
+    const auto result = process_event(state, vis, ftxui::Event::Character(']'));
+
+    EXPECT_FALSE(result.consumed);
+}
+
+// --- CommandMode: :timeline and :tree ----------------------------------------
+
+TEST(CommandMode, Return_Timeline_SwitchesToTimelineView)
+{
+    NodePool pool;
+    ViewState state;
+    state.mode = Mode::Command;
+    state.cmd_buffer = "timeline";
+    constexpr std::int64_t kNow = 500'000;
+    const auto vis = compute_visible(pool, state.folded);
+
+    const auto result = process_event(state, vis, ftxui::Event::Return, kNow);
+
+    EXPECT_TRUE(result.consumed);
+    EXPECT_FALSE(result.command.has_value());
+    EXPECT_EQ(state.mode, Mode::Normal);
+    EXPECT_EQ(state.view_mode, ViewMode::Timeline);
+    EXPECT_EQ(state.timeline_start_epoch, today_epoch(kNow));
+}
+
+TEST(CommandMode, Return_Tree_SwitchesToTreeView)
+{
+    NodePool pool;
+    ViewState state;
+    state.mode = Mode::Command;
+    state.view_mode = ViewMode::Timeline;
+    state.cmd_buffer = "tree";
+    const auto vis = compute_visible(pool, state.folded);
+
+    const auto result = process_event(state, vis, ftxui::Event::Return);
+
+    EXPECT_TRUE(result.consumed);
+    EXPECT_FALSE(result.command.has_value());
+    EXPECT_EQ(state.mode, Mode::Normal);
+    EXPECT_EQ(state.view_mode, ViewMode::Tree);
+}
+
 }  // namespace toe::ui

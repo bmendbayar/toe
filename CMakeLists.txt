@@ -88,3 +88,15 @@ target_compile_features(toe_date_tests PRIVATE cxx_std_23)
 target_compile_options(toe_date_tests PRIVATE ${TOE_WARNINGS})
 target_link_libraries(toe_date_tests PRIVATE GTest::gtest_main)
 gtest_discover_tests(toe_date_tests)
+
+add_executable(toe_timeline_tests
+    tests/timeline_tests.cpp
+)
+target_include_directories(toe_timeline_tests PRIVATE src)
+target_compile_features(toe_timeline_tests PRIVATE cxx_std_23)
+target_compile_options(toe_timeline_tests PRIVATE ${TOE_WARNINGS})
+target_link_libraries(toe_timeline_tests PRIVATE
+    toe_core
+    GTest::gtest_main
+)
+gtest_discover_tests(toe_timeline_tests)
