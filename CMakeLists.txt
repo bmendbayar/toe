@@ -79,3 +79,12 @@ target_link_libraries(toe_ui_tests PRIVATE
     GTest::gtest_main
 )
 gtest_discover_tests(toe_ui_tests)
+
+add_executable(toe_date_tests
+    tests/date_util_tests.cpp
+)
+target_include_directories(toe_date_tests PRIVATE src)
+target_compile_features(toe_date_tests PRIVATE cxx_std_23)
+target_compile_options(toe_date_tests PRIVATE ${TOE_WARNINGS})
+target_link_libraries(toe_date_tests PRIVATE GTest::gtest_main)
+gtest_discover_tests(toe_date_tests)
