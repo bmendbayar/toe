@@ -5,6 +5,8 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
 include(FetchContent)
 
@@ -26,7 +28,7 @@ FetchContent_MakeAvailable(ftxui)
 set(TOE_WARNINGS -Wall -Wextra -Werror)
 
 add_library(toe_core STATIC
-    src/core/core.cpp
+    src/core/node_pool.cpp
 )
 target_include_directories(toe_core PUBLIC src)
 target_compile_features(toe_core PUBLIC cxx_std_23)
