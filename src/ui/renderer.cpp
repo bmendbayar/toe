@@ -3,8 +3,10 @@
 #include <ftxui/screen/color.hpp>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "core/fields.hpp"
+#include "ui/date_util.hpp"
 #include "ui/renderer.hpp"
 
 namespace toe::ui
@@ -80,7 +82,23 @@ int task_depth(const core::NodePool &pool, core::TaskId id)
         return text("  ");
     }();
 
-    Element row = hbox({text(indent), text(std::string(fold_marker)), text(std::string(status_glyph(status))), text(" "), std::move(prio_elem), text(" "), std::move(desc_elem)});
+    const auto due_opt = pool.get_due_date(id).value_or(std::nullopt);
+
+    Elements row_elems{
+        text(indent),
+        text(std::string(fold_marker)),
+        text(std::string(status_glyph(status))),
+        text(" "),
+        std::move(prio_elem),
+        text(" "),
+        std::move(desc_elem),
+    };
+    if (due_opt.has_value())
+    {
+        row_elems.push_back(text("  "));
+        row_elems.push_back(color(Color::Cyan, text(format_due_date(*due_opt))));
+    }
+    Element row = hbox(std::move(row_elems));
 
     if (id == state.cursor)
     {
@@ -117,6 +135,10 @@ ftxui::Element render_status_bar(const ViewState &state)
         case Mode::Normal:
             return hbox({text(" NORMAL ") | bold | color(Color::GreenLight), text("  ")});
         case Mode::Insert:
+            if (state.edit_field == EditField::DueDate)
+            {
+                return hbox({text(" DATE   ") | bold | color(Color::Cyan), text("  YYYY-MM-DD  "), text(state.edit_buffer), text("█") | blink});
+            }
             return hbox({text(" INSERT ") | bold | color(Color::BlueLight), text("  "), text(state.edit_buffer), text("█") | blink});
         case Mode::Command:
             return hbox({text(":"), text(state.cmd_buffer), text("█") | blink});

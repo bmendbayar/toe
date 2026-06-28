@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <ftxui/component/event.hpp>
 
 #include "core/error.hpp"
@@ -394,6 +395,19 @@ TEST(NormalMode, q_EmitsCmdQuit)
     EXPECT_TRUE(std::holds_alternative<CmdQuit>(*result.command));
 }
 
+TEST(NormalMode, D_EmitsCmdBeginEditDueDate)
+{
+    NodePool pool;
+    ViewState state;
+    const auto vis = compute_visible(pool, state.folded);
+
+    const auto result = process_event(state, vis, ftxui::Event::D);
+
+    EXPECT_TRUE(result.consumed);
+    ASSERT_TRUE(result.command.has_value());
+    EXPECT_TRUE(std::holds_alternative<CmdBeginEditDueDate>(*result.command));
+}
+
 TEST(NormalMode, UnknownKey_IsNotConsumed)
 {
     NodePool pool;
@@ -450,6 +464,26 @@ TEST(InsertMode, Return_EmitsCmdCommitEdit_AndReturnToNormal)
     ASSERT_TRUE(std::holds_alternative<CmdCommitEdit>(*result.command));
     EXPECT_EQ(std::get<CmdCommitEdit>(*result.command).text, "Buy milk");
     EXPECT_EQ(state.mode, Mode::Normal);
+    EXPECT_TRUE(state.edit_buffer.empty());
+}
+
+TEST(InsertMode, Return_InDateField_EmitsCmdCommitDueDate)
+{
+    NodePool pool;
+    ViewState state;
+    state.mode = Mode::Insert;
+    state.edit_field = EditField::DueDate;
+    state.edit_buffer = "2025-07-04";
+    const auto vis = compute_visible(pool, state.folded);
+
+    const auto result = process_event(state, vis, ftxui::Event::Return);
+
+    EXPECT_TRUE(result.consumed);
+    ASSERT_TRUE(result.command.has_value());
+    ASSERT_TRUE(std::holds_alternative<CmdCommitDueDate>(*result.command));
+    EXPECT_EQ(std::get<CmdCommitDueDate>(*result.command).text, "2025-07-04");
+    EXPECT_EQ(state.mode, Mode::Normal);
+    EXPECT_EQ(state.edit_field, EditField::Description);
     EXPECT_TRUE(state.edit_buffer.empty());
 }
 
@@ -537,6 +571,21 @@ TEST(CommandMode, Return_UnknownCmd_NoCommand)
 
     EXPECT_TRUE(result.consumed);
     EXPECT_FALSE(result.command.has_value());
+    EXPECT_EQ(state.mode, Mode::Normal);
+}
+
+TEST(CommandMode, Return_QBang_EmitsCmdForceQuit)
+{
+    NodePool pool;
+    ViewState state;
+    state.mode = Mode::Command;
+    state.cmd_buffer = "q!";
+    const auto vis = compute_visible(pool, state.folded);
+
+    const auto result = process_event(state, vis, ftxui::Event::Return);
+
+    ASSERT_TRUE(result.command.has_value());
+    EXPECT_TRUE(std::holds_alternative<CmdForceQuit>(*result.command));
     EXPECT_EQ(state.mode, Mode::Normal);
 }
 
@@ -783,6 +832,98 @@ TEST(ApplyCommand, Quit_IsNoOpOnPool)
 
     EXPECT_TRUE(apply_command(Command{CmdQuit{}}, pool, state, vis).has_value());
     EXPECT_EQ(pool.live_count(), 0u);
+}
+
+TEST(ApplyCommand, BeginEditDueDate_SetsInsertModeAndDateEditField)
+{
+    NodePool pool;
+    const TaskId a = pool.add_root();
+    ViewState state;
+    state.cursor = a;
+    const auto vis = compute_visible(pool, state.folded);
+
+    ASSERT_TRUE(apply_command(Command{CmdBeginEditDueDate{}}, pool, state, vis).has_value());
+
+    EXPECT_EQ(state.mode, Mode::Insert);
+    EXPECT_EQ(state.edit_field, EditField::DueDate);
+    EXPECT_TRUE(state.edit_buffer.empty());  // no date set yet
+}
+
+TEST(ApplyCommand, BeginEditDueDate_PrePopulatesBufferWhenDateSet)
+{
+    NodePool pool;
+    const TaskId a = pool.add_root();
+    using namespace std::chrono;
+    const auto epoch =
+        sys_days{year{2025} / July / 4}.time_since_epoch().count() * std::int64_t{86400};
+    ASSERT_TRUE(pool.set_due_date(a, epoch).has_value());
+    ViewState state;
+    state.cursor = a;
+    const auto vis = compute_visible(pool, state.folded);
+
+    ASSERT_TRUE(apply_command(Command{CmdBeginEditDueDate{}}, pool, state, vis).has_value());
+
+    EXPECT_EQ(state.edit_buffer, "2025-07-04");
+}
+
+TEST(ApplyCommand, CommitDueDate_ParsesAndStoresDate)
+{
+    NodePool pool;
+    const TaskId a = pool.add_root();
+    ViewState state;
+    state.cursor = a;
+    const auto vis = compute_visible(pool, state.folded);
+
+    using namespace std::chrono;
+    const auto expected =
+        sys_days{year{2025} / July / 4}.time_since_epoch().count() * std::int64_t{86400};
+
+    ASSERT_TRUE(
+        apply_command(Command{CmdCommitDueDate{.text = "2025-07-04"}}, pool, state, vis).has_value()
+    );
+
+    const auto date = pool.get_due_date(a);
+    ASSERT_TRUE(date.has_value());
+    ASSERT_TRUE(date->has_value());
+    EXPECT_EQ(**date, expected);
+}
+
+TEST(ApplyCommand, CommitDueDate_EmptyText_ClearsDate)
+{
+    NodePool pool;
+    const TaskId a = pool.add_root();
+    ASSERT_TRUE(pool.set_due_date(a, std::int64_t{0}).has_value());
+    ViewState state;
+    state.cursor = a;
+    const auto vis = compute_visible(pool, state.folded);
+
+    ASSERT_TRUE(
+        apply_command(Command{CmdCommitDueDate{.text = ""}}, pool, state, vis).has_value()
+    );
+
+    const auto date = pool.get_due_date(a);
+    ASSERT_TRUE(date.has_value());
+    EXPECT_FALSE(date->has_value());
+}
+
+TEST(ApplyCommand, CommitDueDate_InvalidText_Noop)
+{
+    NodePool pool;
+    const TaskId a = pool.add_root();
+    ASSERT_TRUE(pool.set_due_date(a, std::int64_t{86400}).has_value());
+    ViewState state;
+    state.cursor = a;
+    const auto vis = compute_visible(pool, state.folded);
+
+    ASSERT_TRUE(
+        apply_command(Command{CmdCommitDueDate{.text = "not-a-date"}}, pool, state, vis).has_value()
+    );
+
+    // Date unchanged
+    const auto date = pool.get_due_date(a);
+    ASSERT_TRUE(date.has_value());
+    ASSERT_TRUE(date->has_value());
+    EXPECT_EQ(**date, std::int64_t{86400});
 }
 
 }  // namespace toe::ui

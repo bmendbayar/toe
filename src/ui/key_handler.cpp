@@ -2,6 +2,7 @@
 #include <iterator>
 
 #include "core/fields.hpp"
+#include "ui/date_util.hpp"
 #include "ui/key_handler.hpp"
 
 namespace toe::ui
@@ -60,7 +61,7 @@ EventResult handle_normal(ViewState &state, const std::vector<core::TaskId> &vis
 {
     const auto reset_d = [&] { state.pending_d = false; };
 
-    // j / ArrowDown — move cursor down one visible row
+    // j / ArrowDown - move cursor down one visible row
     if (event == ftxui::Event::j || event == ftxui::Event::ArrowDown)
     {
         reset_d();
@@ -74,7 +75,7 @@ EventResult handle_normal(ViewState &state, const std::vector<core::TaskId> &vis
         return {.consumed = true, .command = std::nullopt};
     }
 
-    // k / ArrowUp — move cursor up one visible row
+    // k / ArrowUp - move cursor up one visible row
     if (event == ftxui::Event::k || event == ftxui::Event::ArrowUp)
     {
         reset_d();
@@ -87,7 +88,7 @@ EventResult handle_normal(ViewState &state, const std::vector<core::TaskId> &vis
         return {.consumed = true, .command = std::nullopt};
     }
 
-    // g — jump to first visible task
+    // g - jump to first visible task
     if (event == ftxui::Event::g)
     {
         reset_d();
@@ -98,7 +99,7 @@ EventResult handle_normal(ViewState &state, const std::vector<core::TaskId> &vis
         return {.consumed = true, .command = std::nullopt};
     }
 
-    // G — jump to last visible task
+    // G - jump to last visible task
     if (event == ftxui::Event::G)
     {
         reset_d();
@@ -109,7 +110,7 @@ EventResult handle_normal(ViewState &state, const std::vector<core::TaskId> &vis
         return {.consumed = true, .command = std::nullopt};
     }
 
-    // h / ArrowLeft — fold (collapse children)
+    // h / ArrowLeft - fold (collapse children)
     if (event == ftxui::Event::h || event == ftxui::Event::ArrowLeft)
     {
         reset_d();
@@ -120,7 +121,7 @@ EventResult handle_normal(ViewState &state, const std::vector<core::TaskId> &vis
         return {.consumed = true, .command = std::nullopt};
     }
 
-    // l / ArrowRight — unfold (expand children)
+    // l / ArrowRight - unfold (expand children)
     if (event == ftxui::Event::l || event == ftxui::Event::ArrowRight)
     {
         reset_d();
@@ -131,51 +132,59 @@ EventResult handle_normal(ViewState &state, const std::vector<core::TaskId> &vis
         return {.consumed = true, .command = std::nullopt};
     }
 
-    // i — enter Insert mode on focused task
+    // i - enter Insert mode to edit description
     if (event == ftxui::Event::i)
     {
         reset_d();
         state.mode = Mode::Insert;
+        state.edit_field = EditField::Description;
         state.edit_buffer.clear();
         return {.consumed = true, .command = std::nullopt};
     }
 
-    // o — open new sibling below
+    // o - open new sibling below
     if (event == ftxui::Event::o)
     {
         reset_d();
         return {.consumed = true, .command = Command{CmdAddSiblingBelow{}}};
     }
 
-    // O — open new sibling above
+    // O - open new sibling above
     if (event == ftxui::Event::O)
     {
         reset_d();
         return {.consumed = true, .command = Command{CmdAddSiblingAbove{}}};
     }
 
-    // Tab — indent (re-parent under preceding sibling)
+    // Tab - indent (re-parent under preceding sibling)
     if (event == ftxui::Event::Tab)
     {
         reset_d();
         return {.consumed = true, .command = Command{CmdIndent{}}};
     }
 
-    // Shift+Tab — outdent (lift to grandparent level)
+    // Shift+Tab - outdent (lift to grandparent level)
     if (event == ftxui::Event::TabReverse)
     {
         reset_d();
         return {.consumed = true, .command = Command{CmdOutdent{}}};
     }
 
-    // x — toggle Done ↔ Todo
+    // x - toggle Done <-> Todo
     if (event == ftxui::Event::x)
     {
         reset_d();
         return {.consumed = true, .command = Command{CmdToggleDone{}}};
     }
 
-    // d / dd — delete task (two-key sequence)
+    // D - enter Insert mode to edit due date (pre-populated if one is set)
+    if (event == ftxui::Event::D)
+    {
+        reset_d();
+        return {.consumed = true, .command = Command{CmdBeginEditDueDate{}}};
+    }
+
+    // d / dd - delete task (two-key sequence)
     if (event == ftxui::Event::d)
     {
         if (state.pending_d)
@@ -187,21 +196,21 @@ EventResult handle_normal(ViewState &state, const std::vector<core::TaskId> &vis
         return {.consumed = true, .command = std::nullopt};
     }
 
-    // p — cycle priority
+    // p - cycle priority
     if (event == ftxui::Event::p)
     {
         reset_d();
         return {.consumed = true, .command = Command{CmdCyclePriority{}}};
     }
 
-    // s — cycle status
+    // s - cycle status
     if (event == ftxui::Event::s)
     {
         reset_d();
         return {.consumed = true, .command = Command{CmdCycleStatus{}}};
     }
 
-    // : — enter Command mode
+    // : - enter Command mode
     if (event == ftxui::Event::Character(':'))
     {
         reset_d();
@@ -210,14 +219,14 @@ EventResult handle_normal(ViewState &state, const std::vector<core::TaskId> &vis
         return {.consumed = true, .command = std::nullopt};
     }
 
-    // q — quit
+    // q - quit
     if (event == ftxui::Event::q)
     {
         reset_d();
         return {.consumed = true, .command = Command{CmdQuit{}}};
     }
 
-    // Esc — cancel pending 'd' sequence
+    // Esc - cancel pending 'd' sequence
     if (event == ftxui::Event::Escape)
     {
         reset_d();
@@ -233,6 +242,7 @@ EventResult handle_insert(ViewState &state, const ftxui::Event &event)
     if (event == ftxui::Event::Escape)
     {
         state.mode = Mode::Normal;
+        state.edit_field = EditField::Description;
         state.edit_buffer.clear();
         return {.consumed = true, .command = std::nullopt};
     }
@@ -242,6 +252,12 @@ EventResult handle_insert(ViewState &state, const ftxui::Event &event)
         std::string text = std::move(state.edit_buffer);
         state.edit_buffer.clear();
         state.mode = Mode::Normal;
+        const EditField field = state.edit_field;
+        state.edit_field = EditField::Description;
+        if (field == EditField::DueDate)
+        {
+            return {.consumed = true, .command = Command{CmdCommitDueDate{.text = std::move(text)}}};
+        }
         return {.consumed = true, .command = Command{CmdCommitEdit{.text = std::move(text)}}};
     }
 
@@ -290,6 +306,10 @@ EventResult handle_command(ViewState &state, const ftxui::Event &event)
         else if (cmd == "wq" || cmd == "x")
         {
             command = Command{CmdSaveAndQuit{}};
+        }
+        else if (cmd == "q!")
+        {
+            command = Command{CmdForceQuit{}};
         }
         return {.consumed = true, .command = std::move(command)};
     }
@@ -351,6 +371,7 @@ apply_command(const Command &cmd, core::NodePool &pool, ViewState &state, const 
                     state.cursor = *result;
                 }
                 state.mode = Mode::Insert;
+                state.edit_field = EditField::Description;
                 state.edit_buffer.clear();
                 return {};
             }
@@ -371,6 +392,7 @@ apply_command(const Command &cmd, core::NodePool &pool, ViewState &state, const 
                     state.cursor = *result;
                 }
                 state.mode = Mode::Insert;
+                state.edit_field = EditField::Description;
                 state.edit_buffer.clear();
                 return {};
             }
@@ -432,7 +454,7 @@ apply_command(const Command &cmd, core::NodePool &pool, ViewState &state, const 
                             break;
                         }
                     }
-                    // Nothing usable after — fall back to the task before cursor.
+                    // Nothing usable after - fall back to the task before cursor.
                     if (!fallback.is_valid() && it != visible.begin())
                     {
                         fallback = *std::prev(it);
@@ -499,7 +521,46 @@ apply_command(const Command &cmd, core::NodePool &pool, ViewState &state, const 
                 return pool.set_description(state.cursor, c.text);
             }
 
-            // CmdQuit, CmdSave, CmdSaveAndQuit: no Core mutation; app handles them.
+            if constexpr (std::is_same_v<T, CmdBeginEditDueDate>)
+            {
+                if (!state.cursor.is_valid())
+                {
+                    return {};
+                }
+                const auto date_result = pool.get_due_date(state.cursor);
+                if (!date_result)
+                {
+                    return std::unexpected(date_result.error());
+                }
+                state.edit_buffer.clear();
+                if (date_result->has_value())
+                {
+                    state.edit_buffer = format_due_date(**date_result);
+                }
+                state.edit_field = EditField::DueDate;
+                state.mode = Mode::Insert;
+                return {};
+            }
+
+            if constexpr (std::is_same_v<T, CmdCommitDueDate>)
+            {
+                if (!state.cursor.is_valid())
+                {
+                    return {};
+                }
+                if (c.text.empty())
+                {
+                    return pool.set_due_date(state.cursor, std::nullopt);
+                }
+                const auto epoch = parse_due_date(c.text);
+                if (!epoch)
+                {
+                    return {};  // invalid format — no-op, leave date unchanged
+                }
+                return pool.set_due_date(state.cursor, *epoch);
+            }
+
+            // CmdQuit, CmdForceQuit, CmdSave, CmdSaveAndQuit: no Core mutation; app handles them.
             return {};
         },
         cmd

@@ -28,9 +28,16 @@ struct TaskIdHash
 
 using FoldSet = std::unordered_set<core::TaskId, TaskIdHash>;
 
+enum class EditField : std::uint8_t
+{
+    Description,
+    DueDate,
+};
+
 struct ViewState
 {
     Mode mode = Mode::Normal;
+    EditField edit_field = EditField::Description;  // which field 'i'/D edits
     core::TaskId cursor;      // focused task; invalid() = no focus
     FoldSet folded;           // roots of collapsed subtrees
     std::string edit_buffer;  // accumulator in Insert mode
