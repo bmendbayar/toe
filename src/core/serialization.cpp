@@ -22,17 +22,17 @@ namespace
 
 // Format constants. The magic doubles as a version tag's neighbour: bump
 // kVersion (and add a migration path) whenever the layout below changes.
-constexpr char kMagic[4] = {'T', 'O', 'E', '1'};
-constexpr std::uint32_t kVersion = 1;
+constexpr char MAGIC[4] = {'T', 'O', 'E', '1'};
+constexpr std::uint32_t VERSION = 1;
 
 // Header: magic(4) + version(4) + slot_count(4) + free_head(4) + root_index(4)
 // + root_generation(4) + live_count(8) + arena_size(8).
-constexpr std::size_t kHeaderBytes = 40;
+constexpr std::size_t HEADER_BYTES = 40;
 
 // Per-slot on-disk footprint, summed across every parallel array:
 // generation(4) + next_free(4) + parent(8) + first_child(8) + next_sibling(8)
 // + status(1) + priority(1) + due_date(8) + desc(8).
-constexpr std::size_t kPerSlotBytes = 50;
+constexpr std::size_t PER_SLOT_BYTES = 50;
 
 // --- Writing ----------------------------------------------------------------
 
@@ -75,7 +75,7 @@ public:
     {
         if (n > data_.size() - cursor_)
         {
-            return std::unexpected(Error::TruncatedData);
+            return std::unexpected(Error::TRUNCATED_DATA);
         }
         std::memcpy(dst, data_.data() + cursor_, n);
         cursor_ += n;
@@ -100,7 +100,7 @@ public:
         // into a small product that would pass a naive bounds check.
         if (count > (data_.size() - cursor_) / sizeof(T))
         {
-            return std::unexpected(Error::TruncatedData);
+            return std::unexpected(Error::TRUNCATED_DATA);
         }
         out.resize(count);
         if (count != 0)
@@ -165,10 +165,10 @@ std::vector<std::byte> serialize(const NodePool &pool)
     }
 
     std::vector<std::byte> out;
-    out.reserve(kHeaderBytes + (static_cast<std::size_t>(slot_count) * kPerSlotBytes) + arena.size());
+    out.reserve(HEADER_BYTES + (static_cast<std::size_t>(slot_count) * PER_SLOT_BYTES) + arena.size());
 
-    append_bytes(out, kMagic, sizeof(kMagic));
-    put_u32(out, kVersion);
+    append_bytes(out, MAGIC, sizeof(MAGIC));
+    put_u32(out, VERSION);
     put_u32(out, slot_count);
     put_u32(out, pool.free_head_);
     put_u32(out, pool.root_.index);
@@ -194,14 +194,14 @@ std::expected<NodePool, Error> deserialize(const std::span<const std::byte> byte
 {
     Reader r{bytes};
 
-    char magic[sizeof(kMagic)];
+    char magic[sizeof(MAGIC)];
     if (const auto e = r.read_raw(magic, sizeof(magic)); !e)
     {
         return std::unexpected(e.error());
     }
-    if (std::memcmp(magic, kMagic, sizeof(kMagic)) != 0)
+    if (std::memcmp(magic, MAGIC, sizeof(MAGIC)) != 0)
     {
-        return std::unexpected(Error::BadMagic);
+        return std::unexpected(Error::BAD_MAGIC);
     }
 
     std::uint32_t version = 0;
@@ -209,9 +209,9 @@ std::expected<NodePool, Error> deserialize(const std::span<const std::byte> byte
     {
         return std::unexpected(e.error());
     }
-    if (version != kVersion)
+    if (version != VERSION)
     {
-        return std::unexpected(Error::UnsupportedVersion);
+        return std::unexpected(Error::UNSUPPORTED_VERSION);
     }
 
     std::uint32_t slot_count = 0;
@@ -255,7 +255,7 @@ std::expected<NodePool, Error> deserialize(const std::span<const std::byte> byte
     // file this build wrote, so refuse rather than ignore the tail.
     if (!r.at_end())
     {
-        return std::unexpected(Error::CorruptData);
+        return std::unexpected(Error::CORRUPT_DATA);
     }
 
     // Validate the free list and recover which slots are free. A bound on the
@@ -266,14 +266,14 @@ std::expected<NodePool, Error> deserialize(const std::span<const std::byte> byte
     {
         if (idx >= slot_count || is_free[idx] || free_count > slot_count)
         {
-            return std::unexpected(Error::CorruptData);
+            return std::unexpected(Error::CORRUPT_DATA);
         }
         is_free[idx] = true;
         ++free_count;
     }
     if (static_cast<std::uint64_t>(slot_count - free_count) != live_count)
     {
-        return std::unexpected(Error::CorruptData);
+        return std::unexpected(Error::CORRUPT_DATA);
     }
 
     // A live link must name a live slot at the recorded generation; a zero-
@@ -292,14 +292,14 @@ std::expected<NodePool, Error> deserialize(const std::span<const std::byte> byte
     {
         if (!link_ok(root))
         {
-            return std::unexpected(Error::CorruptData);
+            return std::unexpected(Error::CORRUPT_DATA);
         }
     }
     else if (live_count != 0)
     {
         // A non-empty forest must have a root; an invalid root with live nodes
         // is inconsistent.
-        return std::unexpected(Error::CorruptData);
+        return std::unexpected(Error::CORRUPT_DATA);
     }
 
     for (std::uint32_t i = 0; i < slot_count; ++i)
@@ -310,22 +310,22 @@ std::expected<NodePool, Error> deserialize(const std::span<const std::byte> byte
         }
         if (generation[i] == 0)
         {
-            return std::unexpected(Error::CorruptData);  // live slots are never gen 0
+            return std::unexpected(Error::CORRUPT_DATA);  // live slots are never gen 0
         }
         if (!link_ok(parent[i]) || !link_ok(first_child[i]) || !link_ok(next_sibling[i]))
         {
-            return std::unexpected(Error::CorruptData);
+            return std::unexpected(Error::CORRUPT_DATA);
         }
         if (const DescSlice &sl = desc[i];
             sl.length != 0 &&
             (sl.offset > arena_size || sl.length > arena_size - sl.offset))
         {
-            return std::unexpected(Error::CorruptData);
+            return std::unexpected(Error::CORRUPT_DATA);
         }
-        if (static_cast<std::uint8_t>(status[i]) > static_cast<std::uint8_t>(Status::Done) ||
-            static_cast<std::uint8_t>(priority[i]) > static_cast<std::uint8_t>(Priority::High))
+        if (static_cast<std::uint8_t>(status[i]) > static_cast<std::uint8_t>(Status::DONE) ||
+            static_cast<std::uint8_t>(priority[i]) > static_cast<std::uint8_t>(Priority::HIGH))
         {
-            return std::unexpected(Error::CorruptData);
+            return std::unexpected(Error::CORRUPT_DATA);
         }
     }
 
@@ -369,20 +369,20 @@ std::expected<void, Error> save(const NodePool &pool, const std::filesystem::pat
         fs::create_directories(path.parent_path(), ec);
         if (ec)
         {
-            return std::unexpected(Error::IoError);
+            return std::unexpected(Error::IO_ERROR);
         }
     }
 
     std::ofstream os{path, std::ios::binary | std::ios::trunc};
     if (!os)
     {
-        return std::unexpected(Error::IoError);
+        return std::unexpected(Error::IO_ERROR);
     }
     const std::vector<std::byte> bytes = serialize(pool);
     os.write(reinterpret_cast<const char *>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
     if (!os)
     {
-        return std::unexpected(Error::IoError);
+        return std::unexpected(Error::IO_ERROR);
     }
     return {};
 }
@@ -392,12 +392,12 @@ std::expected<NodePool, Error> load(const std::filesystem::path &path)
     std::ifstream is{path, std::ios::binary | std::ios::ate};
     if (!is)
     {
-        return std::unexpected(Error::IoError);
+        return std::unexpected(Error::IO_ERROR);
     }
     const std::streamoff size = is.tellg();
     if (size < 0)
     {
-        return std::unexpected(Error::IoError);
+        return std::unexpected(Error::IO_ERROR);
     }
 
     std::vector<std::byte> bytes(static_cast<std::size_t>(size));
@@ -407,7 +407,7 @@ std::expected<NodePool, Error> load(const std::filesystem::path &path)
         is.read(reinterpret_cast<char *>(bytes.data()), size);
         if (is.gcount() != size)
         {
-            return std::unexpected(Error::IoError);
+            return std::unexpected(Error::IO_ERROR);
         }
     }
     return deserialize(bytes);

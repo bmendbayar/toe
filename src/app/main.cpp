@@ -24,7 +24,7 @@ int main()
     {
         pool = std::move(*r);
     }
-    else if (r.error() != toe::core::Error::IoError)
+    else if (r.error() != toe::core::Error::IO_ERROR)
     {
         // Corrupt save file — abort rather than silently overwrite user data.
         std::fprintf(stderr, "toe: corrupt save file at %s\n", path.c_str());

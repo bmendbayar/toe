@@ -89,7 +89,7 @@ TEST(ModeTransition, NormalI_EntersInsert)
 
     EXPECT_TRUE(result.consumed);
     EXPECT_FALSE(result.command.has_value());
-    EXPECT_EQ(state.mode, Mode::Insert);
+    EXPECT_EQ(state.mode, Mode::INSERT);
 }
 
 TEST(ModeTransition, NormalColon_EntersCommand)
@@ -102,14 +102,14 @@ TEST(ModeTransition, NormalColon_EntersCommand)
 
     EXPECT_TRUE(result.consumed);
     EXPECT_FALSE(result.command.has_value());
-    EXPECT_EQ(state.mode, Mode::Command);
+    EXPECT_EQ(state.mode, Mode::COMMAND);
 }
 
 TEST(ModeTransition, InsertEsc_ReturnsNormal)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::Insert;
+    state.mode = Mode::INSERT;
     state.edit_buffer = "hello";
     const auto vis = compute_visible(pool, state.folded);
 
@@ -117,7 +117,7 @@ TEST(ModeTransition, InsertEsc_ReturnsNormal)
 
     EXPECT_TRUE(result.consumed);
     EXPECT_FALSE(result.command.has_value());
-    EXPECT_EQ(state.mode, Mode::Normal);
+    EXPECT_EQ(state.mode, Mode::NORMAL);
     EXPECT_TRUE(state.edit_buffer.empty());
 }
 
@@ -125,7 +125,7 @@ TEST(ModeTransition, CommandEsc_ReturnsNormal)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::Command;
+    state.mode = Mode::COMMAND;
     state.cmd_buffer = "wq";
     const auto vis = compute_visible(pool, state.folded);
 
@@ -133,7 +133,7 @@ TEST(ModeTransition, CommandEsc_ReturnsNormal)
 
     EXPECT_TRUE(result.consumed);
     EXPECT_FALSE(result.command.has_value());
-    EXPECT_EQ(state.mode, Mode::Normal);
+    EXPECT_EQ(state.mode, Mode::NORMAL);
     EXPECT_TRUE(state.cmd_buffer.empty());
 }
 
@@ -427,21 +427,21 @@ TEST(InsertMode, PrintableChar_AppendsToBuffer)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::Insert;
+    state.mode = Mode::INSERT;
     const auto vis = compute_visible(pool, state.folded);
 
     (void)process_event(state, vis, ftxui::Event::Character('h'));
     (void)process_event(state, vis, ftxui::Event::Character('i'));
 
     EXPECT_EQ(state.edit_buffer, "hi");
-    EXPECT_EQ(state.mode, Mode::Insert);
+    EXPECT_EQ(state.mode, Mode::INSERT);
 }
 
 TEST(InsertMode, Backspace_PopsLastChar)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::Insert;
+    state.mode = Mode::INSERT;
     state.edit_buffer = "abc";
     const auto vis = compute_visible(pool, state.folded);
 
@@ -454,7 +454,7 @@ TEST(InsertMode, Return_EmitsCmdCommitEdit_AndReturnToNormal)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::Insert;
+    state.mode = Mode::INSERT;
     state.edit_buffer = "Buy milk";
     const auto vis = compute_visible(pool, state.folded);
 
@@ -464,7 +464,7 @@ TEST(InsertMode, Return_EmitsCmdCommitEdit_AndReturnToNormal)
     ASSERT_TRUE(result.command.has_value());
     ASSERT_TRUE(std::holds_alternative<CmdCommitEdit>(*result.command));
     EXPECT_EQ(std::get<CmdCommitEdit>(*result.command).text, "Buy milk");
-    EXPECT_EQ(state.mode, Mode::Normal);
+    EXPECT_EQ(state.mode, Mode::NORMAL);
     EXPECT_TRUE(state.edit_buffer.empty());
 }
 
@@ -472,8 +472,8 @@ TEST(InsertMode, Return_InDateField_EmitsCmdCommitDueDate)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::Insert;
-    state.edit_field = EditField::DueDate;
+    state.mode = Mode::INSERT;
+    state.edit_field = EditField::DUE_DATE;
     state.edit_buffer = "2025-07-04";
     const auto vis = compute_visible(pool, state.folded);
 
@@ -483,8 +483,8 @@ TEST(InsertMode, Return_InDateField_EmitsCmdCommitDueDate)
     ASSERT_TRUE(result.command.has_value());
     ASSERT_TRUE(std::holds_alternative<CmdCommitDueDate>(*result.command));
     EXPECT_EQ(std::get<CmdCommitDueDate>(*result.command).text, "2025-07-04");
-    EXPECT_EQ(state.mode, Mode::Normal);
-    EXPECT_EQ(state.edit_field, EditField::Description);
+    EXPECT_EQ(state.mode, Mode::NORMAL);
+    EXPECT_EQ(state.edit_field, EditField::DESCRIPTION);
     EXPECT_TRUE(state.edit_buffer.empty());
 }
 
@@ -494,7 +494,7 @@ TEST(CommandMode, CharAccumulates)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::Command;
+    state.mode = Mode::COMMAND;
     const auto vis = compute_visible(pool, state.folded);
 
     (void)process_event(state, vis, ftxui::Event::Character('w'));
@@ -506,7 +506,7 @@ TEST(CommandMode, Return_W_EmitsCmdSave)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::Command;
+    state.mode = Mode::COMMAND;
     state.cmd_buffer = "w";
     const auto vis = compute_visible(pool, state.folded);
 
@@ -515,14 +515,14 @@ TEST(CommandMode, Return_W_EmitsCmdSave)
     EXPECT_TRUE(result.consumed);
     ASSERT_TRUE(result.command.has_value());
     EXPECT_TRUE(std::holds_alternative<CmdSave>(*result.command));
-    EXPECT_EQ(state.mode, Mode::Normal);
+    EXPECT_EQ(state.mode, Mode::NORMAL);
 }
 
 TEST(CommandMode, Return_Q_EmitsCmdQuit)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::Command;
+    state.mode = Mode::COMMAND;
     state.cmd_buffer = "q";
     const auto vis = compute_visible(pool, state.folded);
 
@@ -536,7 +536,7 @@ TEST(CommandMode, Return_WQ_EmitsCmdSaveAndQuit)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::Command;
+    state.mode = Mode::COMMAND;
     state.cmd_buffer = "wq";
     const auto vis = compute_visible(pool, state.folded);
 
@@ -550,7 +550,7 @@ TEST(CommandMode, Return_X_EmitsCmdSaveAndQuit)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::Command;
+    state.mode = Mode::COMMAND;
     state.cmd_buffer = "x";
     const auto vis = compute_visible(pool, state.folded);
 
@@ -564,7 +564,7 @@ TEST(CommandMode, Return_UnknownCmd_NoCommand)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::Command;
+    state.mode = Mode::COMMAND;
     state.cmd_buffer = "foo";
     const auto vis = compute_visible(pool, state.folded);
 
@@ -572,14 +572,14 @@ TEST(CommandMode, Return_UnknownCmd_NoCommand)
 
     EXPECT_TRUE(result.consumed);
     EXPECT_FALSE(result.command.has_value());
-    EXPECT_EQ(state.mode, Mode::Normal);
+    EXPECT_EQ(state.mode, Mode::NORMAL);
 }
 
 TEST(CommandMode, Return_QBang_EmitsCmdForceQuit)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::Command;
+    state.mode = Mode::COMMAND;
     state.cmd_buffer = "q!";
     const auto vis = compute_visible(pool, state.folded);
 
@@ -587,14 +587,14 @@ TEST(CommandMode, Return_QBang_EmitsCmdForceQuit)
 
     ASSERT_TRUE(result.command.has_value());
     EXPECT_TRUE(std::holds_alternative<CmdForceQuit>(*result.command));
-    EXPECT_EQ(state.mode, Mode::Normal);
+    EXPECT_EQ(state.mode, Mode::NORMAL);
 }
 
 TEST(CommandMode, Backspace_PopsLastChar)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::Command;
+    state.mode = Mode::COMMAND;
     state.cmd_buffer = "wq";
     const auto vis = compute_visible(pool, state.folded);
 
@@ -616,7 +616,7 @@ TEST(ApplyCommand, AddSiblingBelow_EmptyPool_CreatesRoot)
     EXPECT_TRUE(res.has_value());
     EXPECT_EQ(pool.live_count(), 1u);
     EXPECT_TRUE(state.cursor.is_valid());
-    EXPECT_EQ(state.mode, Mode::Insert);
+    EXPECT_EQ(state.mode, Mode::INSERT);
 }
 
 TEST(ApplyCommand, AddSiblingBelow_CreatesSiblingAfterCursor)
@@ -632,7 +632,7 @@ TEST(ApplyCommand, AddSiblingBelow_CreatesSiblingAfterCursor)
 
     EXPECT_TRUE(res.has_value());
     EXPECT_EQ(pool.live_count(), 3u);
-    EXPECT_EQ(state.mode, Mode::Insert);
+    EXPECT_EQ(state.mode, Mode::INSERT);
     // New task must be immediately after a in the root chain
     const TaskId new_task = state.cursor;
     EXPECT_EQ(pool.next_sibling(a).value(), new_task);
@@ -652,7 +652,7 @@ TEST(ApplyCommand, AddSiblingAbove_CreatesBeforeCursor)
 
     EXPECT_TRUE(res.has_value());
     EXPECT_EQ(pool.live_count(), 3u);
-    EXPECT_EQ(state.mode, Mode::Insert);
+    EXPECT_EQ(state.mode, Mode::INSERT);
     // New task must be between a and b
     const TaskId new_task = state.cursor;
     EXPECT_EQ(pool.next_sibling(a).value(), new_task);
@@ -720,21 +720,21 @@ TEST(ApplyCommand, ToggleDone_SetsDone)
 
     ASSERT_TRUE(apply_command(Command{CmdToggleDone{}}, pool, state, vis).has_value());
 
-    EXPECT_EQ(pool.get_status(a).value(), core::Status::Done);
+    EXPECT_EQ(pool.get_status(a).value(), core::Status::DONE);
 }
 
 TEST(ApplyCommand, ToggleDone_TogglesBackToTodo)
 {
     NodePool pool;
     const TaskId a = pool.add_root();
-    ASSERT_TRUE(pool.set_status(a, core::Status::Done).has_value());
+    ASSERT_TRUE(pool.set_status(a, core::Status::DONE).has_value());
     ViewState state;
     state.cursor = a;
     const auto vis = compute_visible(pool, state.folded);
 
     ASSERT_TRUE(apply_command(Command{CmdToggleDone{}}, pool, state, vis).has_value());
 
-    EXPECT_EQ(pool.get_status(a).value(), core::Status::Todo);
+    EXPECT_EQ(pool.get_status(a).value(), core::Status::TODO);
 }
 
 TEST(ApplyCommand, CyclePriority_AdvancesPriority)
@@ -747,7 +747,7 @@ TEST(ApplyCommand, CyclePriority_AdvancesPriority)
 
     ASSERT_TRUE(apply_command(Command{CmdCyclePriority{}}, pool, state, vis).has_value());
 
-    EXPECT_EQ(pool.get_priority(a).value(), core::Priority::Medium);
+    EXPECT_EQ(pool.get_priority(a).value(), core::Priority::MEDIUM);
 }
 
 TEST(ApplyCommand, CycleStatus_AdvancesStatus)
@@ -760,7 +760,7 @@ TEST(ApplyCommand, CycleStatus_AdvancesStatus)
 
     ASSERT_TRUE(apply_command(Command{CmdCycleStatus{}}, pool, state, vis).has_value());
 
-    EXPECT_EQ(pool.get_status(a).value(), core::Status::InProgress);
+    EXPECT_EQ(pool.get_status(a).value(), core::Status::IN_PROGRESS);
 }
 
 TEST(ApplyCommand, CommitEdit_SetsDescription)
@@ -846,7 +846,7 @@ TEST(ApplyCommand, BeginDatePicker_EntersDatePickerMode)
     // now_seconds=0: no date set, so picker seeds to today_epoch(0) = 0
     ASSERT_TRUE(apply_command(Command{CmdBeginDatePicker{}}, pool, state, vis).has_value());
 
-    EXPECT_EQ(state.mode, Mode::DatePicker);
+    EXPECT_EQ(state.mode, Mode::DATE_PICKER);
     EXPECT_EQ(state.picker.view_epoch, today_epoch(0));
 }
 
@@ -864,7 +864,7 @@ TEST(ApplyCommand, BeginDatePicker_SeedsPickerFromExistingDate)
 
     ASSERT_TRUE(apply_command(Command{CmdBeginDatePicker{}}, pool, state, vis).has_value());
 
-    EXPECT_EQ(state.mode, Mode::DatePicker);
+    EXPECT_EQ(state.mode, Mode::DATE_PICKER);
     EXPECT_EQ(state.picker.view_epoch, epoch);
 }
 
@@ -941,7 +941,7 @@ TEST(DatePickerMode, H_MovesBackOneDay)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::DatePicker;
+    state.mode = Mode::DATE_PICKER;
     state.picker.view_epoch = make_epoch(2026, 7, 15);
     const auto vis = compute_visible(pool, state.folded);
 
@@ -956,7 +956,7 @@ TEST(DatePickerMode, L_MovesForwardOneDay)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::DatePicker;
+    state.mode = Mode::DATE_PICKER;
     state.picker.view_epoch = make_epoch(2026, 7, 14);
     const auto vis = compute_visible(pool, state.folded);
 
@@ -969,7 +969,7 @@ TEST(DatePickerMode, J_MovesForwardOneWeek)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::DatePicker;
+    state.mode = Mode::DATE_PICKER;
     state.picker.view_epoch = make_epoch(2026, 7, 1);
     const auto vis = compute_visible(pool, state.folded);
 
@@ -982,7 +982,7 @@ TEST(DatePickerMode, K_MovesBackOneWeek)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::DatePicker;
+    state.mode = Mode::DATE_PICKER;
     state.picker.view_epoch = make_epoch(2026, 7, 8);
     const auto vis = compute_visible(pool, state.folded);
 
@@ -995,7 +995,7 @@ TEST(DatePickerMode, BracketLeft_MovesBackOneMonth)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::DatePicker;
+    state.mode = Mode::DATE_PICKER;
     state.picker.view_epoch = make_epoch(2026, 7, 15);
     const auto vis = compute_visible(pool, state.folded);
 
@@ -1008,7 +1008,7 @@ TEST(DatePickerMode, BracketRight_MovesForwardOneMonth)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::DatePicker;
+    state.mode = Mode::DATE_PICKER;
     state.picker.view_epoch = make_epoch(2026, 6, 15);
     const auto vis = compute_visible(pool, state.folded);
 
@@ -1021,7 +1021,7 @@ TEST(DatePickerMode, T_JumpsToToday)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::DatePicker;
+    state.mode = Mode::DATE_PICKER;
     state.picker.view_epoch = make_epoch(2020, 1, 1);
     const auto vis = compute_visible(pool, state.folded);
 
@@ -1038,7 +1038,7 @@ TEST(DatePickerMode, Enter_EmitsCmdCommitDueDateWithSelectedDate)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::DatePicker;
+    state.mode = Mode::DATE_PICKER;
     state.picker.view_epoch = make_epoch(2026, 7, 15);
     const auto vis = compute_visible(pool, state.folded);
 
@@ -1048,14 +1048,14 @@ TEST(DatePickerMode, Enter_EmitsCmdCommitDueDateWithSelectedDate)
     ASSERT_TRUE(result.command.has_value());
     ASSERT_TRUE(std::holds_alternative<CmdCommitDueDate>(*result.command));
     EXPECT_EQ(std::get<CmdCommitDueDate>(*result.command).text, "2026-07-15");
-    EXPECT_EQ(state.mode, Mode::Normal);
+    EXPECT_EQ(state.mode, Mode::NORMAL);
 }
 
 TEST(DatePickerMode, D_EmitsCmdCommitDueDateEmpty)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::DatePicker;
+    state.mode = Mode::DATE_PICKER;
     state.picker.view_epoch = make_epoch(2026, 7, 15);
     const auto vis = compute_visible(pool, state.folded);
 
@@ -1065,14 +1065,14 @@ TEST(DatePickerMode, D_EmitsCmdCommitDueDateEmpty)
     ASSERT_TRUE(result.command.has_value());
     ASSERT_TRUE(std::holds_alternative<CmdCommitDueDate>(*result.command));
     EXPECT_TRUE(std::get<CmdCommitDueDate>(*result.command).text.empty());
-    EXPECT_EQ(state.mode, Mode::Normal);
+    EXPECT_EQ(state.mode, Mode::NORMAL);
 }
 
 TEST(DatePickerMode, Esc_ReturnsToNormal_NoCmdNoDateChange)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::DatePicker;
+    state.mode = Mode::DATE_PICKER;
     state.picker.view_epoch = make_epoch(2026, 7, 15);
     const auto vis = compute_visible(pool, state.folded);
 
@@ -1080,7 +1080,7 @@ TEST(DatePickerMode, Esc_ReturnsToNormal_NoCmdNoDateChange)
 
     EXPECT_TRUE(result.consumed);
     EXPECT_FALSE(result.command.has_value());
-    EXPECT_EQ(state.mode, Mode::Normal);
+    EXPECT_EQ(state.mode, Mode::NORMAL);
     EXPECT_EQ(state.picker.view_epoch, make_epoch(2026, 7, 15));  // unchanged
 }
 
@@ -1088,7 +1088,7 @@ TEST(DatePickerMode, I_HandoffToInsert_PreFillsBuffer)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::DatePicker;
+    state.mode = Mode::DATE_PICKER;
     state.picker.view_epoch = make_epoch(2026, 7, 15);
     const auto vis = compute_visible(pool, state.folded);
 
@@ -1096,8 +1096,8 @@ TEST(DatePickerMode, I_HandoffToInsert_PreFillsBuffer)
 
     EXPECT_TRUE(result.consumed);
     EXPECT_FALSE(result.command.has_value());
-    EXPECT_EQ(state.mode, Mode::Insert);
-    EXPECT_EQ(state.edit_field, EditField::DueDate);
+    EXPECT_EQ(state.mode, Mode::INSERT);
+    EXPECT_EQ(state.edit_field, EditField::DUE_DATE);
     EXPECT_EQ(state.edit_buffer, "2026-07-15");
 }
 
@@ -1105,7 +1105,7 @@ TEST(DatePickerMode, H_WrapsAcrossMonthBoundary)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::DatePicker;
+    state.mode = Mode::DATE_PICKER;
     state.picker.view_epoch = make_epoch(2026, 8, 1);  // Aug 1
     const auto vis = compute_visible(pool, state.folded);
 
@@ -1118,7 +1118,7 @@ TEST(DatePickerMode, H_WrapsAcrossYearBoundary)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::DatePicker;
+    state.mode = Mode::DATE_PICKER;
     state.picker.view_epoch = make_epoch(2026, 1, 1);  // Jan 1
     const auto vis = compute_visible(pool, state.folded);
 
@@ -1131,7 +1131,7 @@ TEST(DatePickerMode, L_SelectsLeapDay)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::DatePicker;
+    state.mode = Mode::DATE_PICKER;
     state.picker.view_epoch = make_epoch(2024, 2, 28);  // 2024 is a leap year
     const auto vis = compute_visible(pool, state.folded);
 
@@ -1144,7 +1144,7 @@ TEST(DatePickerMode, BracketRight_ClampsEndOfMonth)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::DatePicker;
+    state.mode = Mode::DATE_PICKER;
     state.picker.view_epoch = make_epoch(2026, 1, 31);  // Jan 31
     const auto vis = compute_visible(pool, state.folded);
 
@@ -1158,7 +1158,7 @@ TEST(DatePickerMode, BracketLeft_WrapsAcrossYear)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::DatePicker;
+    state.mode = Mode::DATE_PICKER;
     state.picker.view_epoch = make_epoch(2026, 1, 15);  // Jan 15
     const auto vis = compute_visible(pool, state.folded);
 
@@ -1180,7 +1180,7 @@ TEST(NormalMode, T_SwitchesToTimeline)
 
     EXPECT_TRUE(result.consumed);
     EXPECT_FALSE(result.command.has_value());
-    EXPECT_EQ(state.view_mode, ViewMode::Timeline);
+    EXPECT_EQ(state.view_mode, ViewMode::TIMELINE);
     EXPECT_EQ(state.timeline_start_epoch, today_epoch(kNow));
 }
 
@@ -1188,13 +1188,13 @@ TEST(NormalMode, T_TogglesBackToTree)
 {
     NodePool pool;
     ViewState state;
-    state.view_mode = ViewMode::Timeline;
+    state.view_mode = ViewMode::TIMELINE;
     const auto vis = compute_visible(pool, state.folded);
 
     const auto result = process_event(state, vis, ftxui::Event::T, 0);
 
     EXPECT_TRUE(result.consumed);
-    EXPECT_EQ(state.view_mode, ViewMode::Tree);
+    EXPECT_EQ(state.view_mode, ViewMode::TREE);
 }
 
 // --- NormalMode: timeline scroll ([/] keys) ----------------------------------
@@ -1203,7 +1203,7 @@ TEST(NormalMode, BracketLeft_ScrollsTimelineBack)
 {
     NodePool pool;
     ViewState state;
-    state.view_mode = ViewMode::Timeline;
+    state.view_mode = ViewMode::TIMELINE;
     state.timeline_start_epoch = 7 * 86400;  // day 7
     const auto vis = compute_visible(pool, state.folded);
 
@@ -1217,7 +1217,7 @@ TEST(NormalMode, BracketRight_ScrollsTimelineForward)
 {
     NodePool pool;
     ViewState state;
-    state.view_mode = ViewMode::Timeline;
+    state.view_mode = ViewMode::TIMELINE;
     state.timeline_start_epoch = 0;
     const auto vis = compute_visible(pool, state.folded);
 
@@ -1256,7 +1256,7 @@ TEST(CommandMode, Return_Timeline_SwitchesToTimelineView)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::Command;
+    state.mode = Mode::COMMAND;
     state.cmd_buffer = "timeline";
     constexpr std::int64_t kNow = 500'000;
     const auto vis = compute_visible(pool, state.folded);
@@ -1265,8 +1265,8 @@ TEST(CommandMode, Return_Timeline_SwitchesToTimelineView)
 
     EXPECT_TRUE(result.consumed);
     EXPECT_FALSE(result.command.has_value());
-    EXPECT_EQ(state.mode, Mode::Normal);
-    EXPECT_EQ(state.view_mode, ViewMode::Timeline);
+    EXPECT_EQ(state.mode, Mode::NORMAL);
+    EXPECT_EQ(state.view_mode, ViewMode::TIMELINE);
     EXPECT_EQ(state.timeline_start_epoch, today_epoch(kNow));
 }
 
@@ -1274,8 +1274,8 @@ TEST(CommandMode, Return_Tree_SwitchesToTreeView)
 {
     NodePool pool;
     ViewState state;
-    state.mode = Mode::Command;
-    state.view_mode = ViewMode::Timeline;
+    state.mode = Mode::COMMAND;
+    state.view_mode = ViewMode::TIMELINE;
     state.cmd_buffer = "tree";
     const auto vis = compute_visible(pool, state.folded);
 
@@ -1283,8 +1283,8 @@ TEST(CommandMode, Return_Tree_SwitchesToTreeView)
 
     EXPECT_TRUE(result.consumed);
     EXPECT_FALSE(result.command.has_value());
-    EXPECT_EQ(state.mode, Mode::Normal);
-    EXPECT_EQ(state.view_mode, ViewMode::Tree);
+    EXPECT_EQ(state.mode, Mode::NORMAL);
+    EXPECT_EQ(state.view_mode, ViewMode::TREE);
 }
 
 }  // namespace toe::ui

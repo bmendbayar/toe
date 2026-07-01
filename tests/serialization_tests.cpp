@@ -91,8 +91,8 @@ TEST(Serialization, RoundTripPreservesFields)
     const TaskId b = pool.add_child(a).value();
     const TaskId c = pool.add_child(a).value();
 
-    ASSERT_TRUE(pool.set_status(a, Status::InProgress).has_value());
-    ASSERT_TRUE(pool.set_priority(b, Priority::High).has_value());
+    ASSERT_TRUE(pool.set_status(a, Status::IN_PROGRESS).has_value());
+    ASSERT_TRUE(pool.set_priority(b, Priority::HIGH).has_value());
     ASSERT_TRUE(pool.set_due_date(c, 1'700'000'000).has_value());
     ASSERT_TRUE(pool.set_description(a, "root task").has_value());
     ASSERT_TRUE(pool.set_description(b, "child with a longer description").has_value());
@@ -102,8 +102,8 @@ TEST(Serialization, RoundTripPreservesFields)
     // Spot-check the decoded values, not just structural equivalence.
     const auto loaded = deserialize(serialize(pool));
     ASSERT_TRUE(loaded.has_value());
-    EXPECT_EQ(loaded->get_status(a).value(), Status::InProgress);
-    EXPECT_EQ(loaded->get_priority(b).value(), Priority::High);
+    EXPECT_EQ(loaded->get_status(a).value(), Status::IN_PROGRESS);
+    EXPECT_EQ(loaded->get_priority(b).value(), Priority::HIGH);
     EXPECT_EQ(loaded->get_due_date(c).value(), std::optional<std::int64_t>{1'700'000'000});
     EXPECT_EQ(loaded->get_description(a).value(), std::string_view{"root task"});
 }
@@ -186,7 +186,7 @@ TEST(Serialization, RejectsBadMagic)
 
     const auto loaded = deserialize(bytes);
     ASSERT_FALSE(loaded.has_value());
-    EXPECT_EQ(loaded.error(), Error::BadMagic);
+    EXPECT_EQ(loaded.error(), Error::BAD_MAGIC);
 }
 
 TEST(Serialization, RejectsUnsupportedVersion)
@@ -198,7 +198,7 @@ TEST(Serialization, RejectsUnsupportedVersion)
 
     const auto loaded = deserialize(bytes);
     ASSERT_FALSE(loaded.has_value());
-    EXPECT_EQ(loaded.error(), Error::UnsupportedVersion);
+    EXPECT_EQ(loaded.error(), Error::UNSUPPORTED_VERSION);
 }
 
 TEST(Serialization, RejectsTruncatedHeader)
@@ -210,7 +210,7 @@ TEST(Serialization, RejectsTruncatedHeader)
 
     const auto loaded = deserialize(cut);
     ASSERT_FALSE(loaded.has_value());
-    EXPECT_EQ(loaded.error(), Error::TruncatedData);
+    EXPECT_EQ(loaded.error(), Error::TRUNCATED_DATA);
 }
 
 TEST(Serialization, RejectsTruncatedBody)
@@ -223,7 +223,7 @@ TEST(Serialization, RejectsTruncatedBody)
 
     const auto loaded = deserialize(bytes);
     ASSERT_FALSE(loaded.has_value());
-    EXPECT_EQ(loaded.error(), Error::TruncatedData);
+    EXPECT_EQ(loaded.error(), Error::TRUNCATED_DATA);
 }
 
 TEST(Serialization, RejectsTrailingGarbage)
@@ -235,7 +235,7 @@ TEST(Serialization, RejectsTrailingGarbage)
 
     const auto loaded = deserialize(bytes);
     ASSERT_FALSE(loaded.has_value());
-    EXPECT_EQ(loaded.error(), Error::CorruptData);
+    EXPECT_EQ(loaded.error(), Error::CORRUPT_DATA);
 }
 
 TEST(Serialization, RejectsOutOfRangeFreeHead)
@@ -248,7 +248,7 @@ TEST(Serialization, RejectsOutOfRangeFreeHead)
 
     const auto loaded = deserialize(bytes);
     ASSERT_FALSE(loaded.has_value());
-    EXPECT_EQ(loaded.error(), Error::CorruptData);
+    EXPECT_EQ(loaded.error(), Error::CORRUPT_DATA);
 }
 
 TEST(Serialization, RejectsCorruptHandle)
@@ -267,7 +267,7 @@ TEST(Serialization, RejectsCorruptHandle)
 
     const auto loaded = deserialize(bytes);
     ASSERT_FALSE(loaded.has_value());
-    EXPECT_EQ(loaded.error(), Error::CorruptData);
+    EXPECT_EQ(loaded.error(), Error::CORRUPT_DATA);
 }
 
 TEST(Serialization, RejectsCorruptDescriptionOffset)
@@ -287,7 +287,7 @@ TEST(Serialization, RejectsCorruptDescriptionOffset)
 
     const auto loaded = deserialize(bytes);
     ASSERT_FALSE(loaded.has_value());
-    EXPECT_EQ(loaded.error(), Error::CorruptData);
+    EXPECT_EQ(loaded.error(), Error::CORRUPT_DATA);
 }
 
 // --- Filesystem -------------------------------------------------------------
@@ -360,7 +360,7 @@ TEST(Serialization, LoadMissingFileReportsIoError)
 
     const auto loaded = load(path);
     ASSERT_FALSE(loaded.has_value());
-    EXPECT_EQ(loaded.error(), Error::IoError);
+    EXPECT_EQ(loaded.error(), Error::IO_ERROR);
 }
 
 }  // namespace

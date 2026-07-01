@@ -32,10 +32,10 @@ TaskId NodePool::allocate()
         first_child_[index] = TaskId::invalid();
         next_sibling_[index] = TaskId::invalid();
         // Reset fields to defaults so reused slots never expose stale data.
-        status_[index]   = Status::Todo;
-        priority_[index] = Priority::Low;
-        due_date_[index] = kNoDueDate;
-        desc_[index]     = DescSlice{};
+        status_[index] = Status::TODO;
+        priority_[index] = Priority::LOW;
+        due_date_[index] = NO_DUE_DATE;
+        desc_[index] = DescSlice{};
         return TaskId{.index = index, .generation = generation_[index]};
     }
 
@@ -45,9 +45,9 @@ TaskId NodePool::allocate()
     parent_.push_back(TaskId::invalid());
     first_child_.push_back(TaskId::invalid());
     next_sibling_.push_back(TaskId::invalid());
-    status_.push_back(Status::Todo);
-    priority_.push_back(Priority::Low);
-    due_date_.push_back(kNoDueDate);
+    status_.push_back(Status::TODO);
+    priority_.push_back(Priority::LOW);
+    due_date_.push_back(NO_DUE_DATE);
     desc_.push_back(DescSlice{});
     return TaskId{.index = index, .generation = 1};
 }
@@ -56,7 +56,7 @@ std::expected<void, Error> NodePool::free(const TaskId id)
 {
     if (!is_valid(id))
     {
-        return std::unexpected(Error::StaleHandle);
+        return std::unexpected(Error::STALE_HANDLE);
     }
 
     // Bump the generation so all outstanding handles to this slot go stale.
@@ -88,7 +88,7 @@ std::expected<TaskId, Error> NodePool::add_child(const TaskId parent)
 {
     if (!is_valid(parent))
     {
-        return std::unexpected(Error::StaleHandle);
+        return std::unexpected(Error::STALE_HANDLE);
     }
     const TaskId id = allocate();
     append_to_chain(parent, id);
@@ -99,7 +99,7 @@ std::expected<TaskId, Error> NodePool::add_sibling_after(const TaskId after)
 {
     if (!is_valid(after))
     {
-        return std::unexpected(Error::StaleHandle);
+        return std::unexpected(Error::STALE_HANDLE);
     }
     const TaskId id = allocate();
     insert_after(after, id);
@@ -110,7 +110,7 @@ std::expected<TaskId, Error> NodePool::add_sibling_before(const TaskId before)
 {
     if (!is_valid(before))
     {
-        return std::unexpected(Error::StaleHandle);
+        return std::unexpected(Error::STALE_HANDLE);
     }
     const TaskId id = allocate();
     const TaskId prev = prev_sibling(before);
@@ -142,7 +142,7 @@ std::expected<void, Error> NodePool::move(const TaskId id, const TaskId new_pare
 {
     if (!is_valid(id))
     {
-        return std::unexpected(Error::StaleHandle);
+        return std::unexpected(Error::STALE_HANDLE);
     }
 
     // An invalid handle is the explicit "make it a root" request; any other
@@ -151,7 +151,7 @@ std::expected<void, Error> NodePool::move(const TaskId id, const TaskId new_pare
     {
         if (!is_valid(new_parent))
         {
-            return std::unexpected(Error::StaleHandle);
+            return std::unexpected(Error::STALE_HANDLE);
         }
         // Reject attaching id to itself or to one of its own descendants: walk
         // up from new_parent and bail if we ever reach id.
@@ -159,7 +159,7 @@ std::expected<void, Error> NodePool::move(const TaskId id, const TaskId new_pare
         {
             if (cur == id)
             {
-                return std::unexpected(Error::WouldCreateCycle);
+                return std::unexpected(Error::WOULD_CREATE_CYCLE);
             }
         }
     }
@@ -173,12 +173,12 @@ std::expected<void, Error> NodePool::indent(const TaskId id)
 {
     if (!is_valid(id))
     {
-        return std::unexpected(Error::StaleHandle);
+        return std::unexpected(Error::STALE_HANDLE);
     }
     const TaskId prev = prev_sibling(id);
     if (!prev.is_valid())
     {
-        return std::unexpected(Error::NoPreviousSibling);
+        return std::unexpected(Error::NO_PREVIOUS_SIBLING);
     }
     // prev is a sibling, never a descendant of id, so this move cannot cycle.
     return move(id, prev);
@@ -188,12 +188,12 @@ std::expected<void, Error> NodePool::outdent(const TaskId id)
 {
     if (!is_valid(id))
     {
-        return std::unexpected(Error::StaleHandle);
+        return std::unexpected(Error::STALE_HANDLE);
     }
     const TaskId old_parent = parent_[id.index];
     if (!old_parent.is_valid())
     {
-        return std::unexpected(Error::NoParent);
+        return std::unexpected(Error::NO_PARENT);
     }
 
     // Lift to the grandparent's level, immediately after the former parent so
@@ -207,7 +207,7 @@ std::expected<void, Error> NodePool::remove_subtree(const TaskId id)
 {
     if (!is_valid(id))
     {
-        return std::unexpected(Error::StaleHandle);
+        return std::unexpected(Error::STALE_HANDLE);
     }
 
     detach(id);
@@ -253,7 +253,7 @@ std::expected<Status, Error> NodePool::get_status(const TaskId id) const
 {
     if (!is_valid(id))
     {
-        return std::unexpected(Error::StaleHandle);
+        return std::unexpected(Error::STALE_HANDLE);
     }
     return status_[id.index];
 }
@@ -262,7 +262,7 @@ std::expected<void, Error> NodePool::set_status(const TaskId id, const Status s)
 {
     if (!is_valid(id))
     {
-        return std::unexpected(Error::StaleHandle);
+        return std::unexpected(Error::STALE_HANDLE);
     }
     status_[id.index] = s;
     return {};
@@ -272,7 +272,7 @@ std::expected<Status, Error> NodePool::advance_status(const TaskId id)
 {
     if (!is_valid(id))
     {
-        return std::unexpected(Error::StaleHandle);
+        return std::unexpected(Error::STALE_HANDLE);
     }
     const Status next = cycle_status(status_[id.index]);
     status_[id.index] = next;
@@ -283,7 +283,7 @@ std::expected<Priority, Error> NodePool::get_priority(const TaskId id) const
 {
     if (!is_valid(id))
     {
-        return std::unexpected(Error::StaleHandle);
+        return std::unexpected(Error::STALE_HANDLE);
     }
     return priority_[id.index];
 }
@@ -292,7 +292,7 @@ std::expected<void, Error> NodePool::set_priority(const TaskId id, const Priorit
 {
     if (!is_valid(id))
     {
-        return std::unexpected(Error::StaleHandle);
+        return std::unexpected(Error::STALE_HANDLE);
     }
     priority_[id.index] = p;
     return {};
@@ -302,7 +302,7 @@ std::expected<Priority, Error> NodePool::advance_priority(const TaskId id)
 {
     if (!is_valid(id))
     {
-        return std::unexpected(Error::StaleHandle);
+        return std::unexpected(Error::STALE_HANDLE);
     }
     const Priority next = cycle_priority(priority_[id.index]);
     priority_[id.index] = next;
@@ -314,10 +314,10 @@ NodePool::get_due_date(const TaskId id) const
 {
     if (!is_valid(id))
     {
-        return std::unexpected(Error::StaleHandle);
+        return std::unexpected(Error::STALE_HANDLE);
     }
     const std::int64_t stored = due_date_[id.index];
-    if (stored == kNoDueDate)
+    if (stored == NO_DUE_DATE)
     {
         return std::nullopt;
     }
@@ -329,9 +329,9 @@ NodePool::set_due_date(const TaskId id, const std::optional<std::int64_t> date)
 {
     if (!is_valid(id))
     {
-        return std::unexpected(Error::StaleHandle);
+        return std::unexpected(Error::STALE_HANDLE);
     }
-    due_date_[id.index] = date.value_or(kNoDueDate);
+    due_date_[id.index] = date.value_or(NO_DUE_DATE);
     return {};
 }
 
@@ -340,9 +340,9 @@ NodePool::get_description(const TaskId id) const
 {
     if (!is_valid(id))
     {
-        return std::unexpected(Error::StaleHandle);
+        return std::unexpected(Error::STALE_HANDLE);
     }
-    const DescSlice& sl = desc_[id.index];
+    const DescSlice &sl = desc_[id.index];
     if (sl.length == 0)
     {
         return std::string_view{};
@@ -355,15 +355,15 @@ NodePool::set_description(const TaskId id, const std::string_view desc)
 {
     if (!is_valid(id))
     {
-        return std::unexpected(Error::StaleHandle);
+        return std::unexpected(Error::STALE_HANDLE);
     }
     if (desc.empty())
     {
-        return std::unexpected(Error::EmptyDescription);
+        return std::unexpected(Error::EMPTY_DESCRIPTION);
     }
-    if (desc.size() > kMaxDescriptionBytes)
+    if (desc.size() > MAX_DESCRIPTION_BYTES)
     {
-        return std::unexpected(Error::DescriptionTooLong);
+        return std::unexpected(Error::DESCRIPTION_TOO_LONG);
     }
     // Old arena bytes for this node are orphaned; compaction happens at save.
     const auto offset = static_cast<std::uint32_t>(desc_arena_.size());
@@ -379,7 +379,7 @@ std::expected<TaskId, Error> NodePool::parent(const TaskId id) const
 {
     if (!is_valid(id))
     {
-        return std::unexpected(Error::StaleHandle);
+        return std::unexpected(Error::STALE_HANDLE);
     }
     return parent_[id.index];
 }
@@ -388,7 +388,7 @@ std::expected<TaskId, Error> NodePool::first_child(const TaskId id) const
 {
     if (!is_valid(id))
     {
-        return std::unexpected(Error::StaleHandle);
+        return std::unexpected(Error::STALE_HANDLE);
     }
     return first_child_[id.index];
 }
@@ -397,7 +397,7 @@ std::expected<TaskId, Error> NodePool::next_sibling(const TaskId id) const
 {
     if (!is_valid(id))
     {
-        return std::unexpected(Error::StaleHandle);
+        return std::unexpected(Error::STALE_HANDLE);
     }
     return next_sibling_[id.index];
 }

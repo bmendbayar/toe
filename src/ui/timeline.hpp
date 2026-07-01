@@ -13,8 +13,8 @@ namespace toe::ui
 {
 
 // Sentinel column values for tasks that fall outside the visible window.
-inline constexpr int kColBeforeWindow = -1;
-inline constexpr int kColAfterWindow = -2;
+inline constexpr int COL_BEFORE_WINDOW = -1;
+inline constexpr int COL_AFTER_WINDOW = -2;
 
 // A task with a due date, pre-resolved for layout purposes.
 struct DatedTask
@@ -39,29 +39,29 @@ struct TimelineRow
 // Display color for a timeline bar. Overdue status takes precedence over priority.
 enum class RowColor : std::uint8_t
 {
-    Overdue,         // red
-    HighPriority,    // bold/magenta
-    MediumPriority,  // yellow
-    Normal,          // default
+    OVERDUE,          // red
+    HIGH_PRIORITY,    // bold/magenta
+    MEDIUM_PRIORITY,  // yellow
+    NORMAL,           // default
 };
 
 [[nodiscard]] constexpr RowColor
 timeline_row_color(core::Priority p, Urgency u) noexcept
 {
-    if (u == Urgency::Overdue)
+    if (u == Urgency::OVERDUE)
     {
-        return RowColor::Overdue;
+        return RowColor::OVERDUE;
     }
     switch (p)
     {
-        case core::Priority::High:
-            return RowColor::HighPriority;
-        case core::Priority::Medium:
-            return RowColor::MediumPriority;
-        case core::Priority::Low:
-            return RowColor::Normal;
+        case core::Priority::HIGH:
+            return RowColor::HIGH_PRIORITY;
+        case core::Priority::MEDIUM:
+            return RowColor::MEDIUM_PRIORITY;
+        case core::Priority::LOW:
+            return RowColor::NORMAL;
     }
-    return RowColor::Normal;
+    return RowColor::NORMAL;
 }
 
 // Map each DatedTask to its grid column.
@@ -83,16 +83,16 @@ layout_timeline(
     {
         const std::int64_t due_day = floor_to_day(t.due_epoch);
         const std::int64_t start_day = floor_to_day(start_epoch);
-        const std::int64_t diff = (due_day - start_day) / kSecondsPerDay;
+        const std::int64_t diff = (due_day - start_day) / SECONDS_PER_DAY;
 
         int col;
         if (diff < 0)
         {
-            col = kColBeforeWindow;
+            col = COL_BEFORE_WINDOW;
         }
         else if (diff >= static_cast<std::int64_t>(span_days))
         {
-            col = kColAfterWindow;
+            col = COL_AFTER_WINDOW;
         }
         else
         {

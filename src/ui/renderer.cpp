@@ -36,11 +36,11 @@ int task_depth(const core::NodePool &pool, core::TaskId id)
 {
     switch (s)
     {
-        case core::Status::Todo:
+        case core::Status::TODO:
             return "[ ]";
-        case core::Status::InProgress:
+        case core::Status::IN_PROGRESS:
             return "[>]";
-        case core::Status::Done:
+        case core::Status::DONE:
             return "[x]";
     }
     return "[ ]";
@@ -58,8 +58,8 @@ int task_depth(const core::NodePool &pool, core::TaskId id)
     const int depth = task_depth(pool, id);
     const std::string indent(static_cast<std::size_t>(depth) * 2, ' ');
 
-    const auto status = pool.get_status(id).value_or(core::Status::Todo);
-    const auto priority = pool.get_priority(id).value_or(core::Priority::Low);
+    const auto status = pool.get_status(id).value_or(core::Status::TODO);
+    const auto priority = pool.get_priority(id).value_or(core::Priority::LOW);
     const auto desc_sv = pool.get_description(id).value_or(std::string_view{});
 
     const bool has_children =
@@ -69,11 +69,11 @@ int task_depth(const core::NodePool &pool, core::TaskId id)
         has_children ? (is_folded ? "▶ " : "▼ ") : "  ";
 
     Element desc_elem = text(desc_sv.empty() ? "<no description>" : std::string(desc_sv));
-    if (desc_sv.empty() || status == core::Status::Done)
+    if (desc_sv.empty() || status == core::Status::DONE)
     {
         desc_elem = dim(std::move(desc_elem));
     }
-    if (status == core::Status::Done)
+    if (status == core::Status::DONE)
     {
         desc_elem = strikethrough(std::move(desc_elem));
     }
@@ -81,11 +81,11 @@ int task_depth(const core::NodePool &pool, core::TaskId id)
     Element prio_elem = [&]() -> Element {
         switch (priority)
         {
-            case core::Priority::High:
+            case core::Priority::HIGH:
                 return bold(color(Color::Red, text("!!")));
-            case core::Priority::Medium:
+            case core::Priority::MEDIUM:
                 return color(Color::Yellow, text("! "));
-            case core::Priority::Low:
+            case core::Priority::LOW:
                 return text("  ");
         }
         return text("  ");
@@ -109,13 +109,13 @@ int task_depth(const core::NodePool &pool, core::TaskId id)
         Element date_elem;
         switch (urg)
         {
-            case Urgency::Overdue:
+            case Urgency::OVERDUE:
                 date_elem = color(Color::Red, text(label));
                 break;
-            case Urgency::Soon:
+            case Urgency::SOON:
                 date_elem = color(Color::Yellow, text(label));
                 break;
-            case Urgency::Normal:
+            case Urgency::NORMAL:
                 date_elem = color(Color::Cyan, text(label));
                 break;
         }
@@ -227,13 +227,13 @@ inline constexpr int kTimelineDescWidth = 18;
     using ftxui::Color;
     switch (rc)
     {
-        case RowColor::Overdue:
+        case RowColor::OVERDUE:
             return Color::Red;
-        case RowColor::HighPriority:
+        case RowColor::HIGH_PRIORITY:
             return Color::Magenta;
-        case RowColor::MediumPriority:
+        case RowColor::MEDIUM_PRIORITY:
             return Color::Yellow;
-        case RowColor::Normal:
+        case RowColor::NORMAL:
             return Color::Default;
     }
     return Color::Default;
@@ -259,7 +259,7 @@ inline constexpr int kTimelineDescWidth = 18;
         {
             continue;
         }
-        const auto prio = pool.get_priority(id).value_or(core::Priority::Low);
+        const auto prio = pool.get_priority(id).value_or(core::Priority::LOW);
         const auto urg = due_urgency(*due_opt, now_epoch);
         const auto desc = pool.get_description(id).value_or(std::string_view{});
         dated.push_back(DatedTask{.id = id, .due_epoch = *due_opt, .priority = prio, .urgency = urg, .description = desc});
@@ -378,7 +378,7 @@ inline constexpr int kTimelineDescWidth = 18;
         Elements bar_elems;
         bar_elems.reserve(kTimelineSpanDays + 2);
 
-        if (row.col == kColBeforeWindow)
+        if (row.col == COL_BEFORE_WINDOW)
         {
             // Deadline is left of the window: show a left-arrow indicator.
             bar_elems.push_back(color(bar_color, text("◀")));
@@ -387,7 +387,7 @@ inline constexpr int kTimelineDescWidth = 18;
                 bar_elems.push_back(text(std::string(kTimelineCellWidth, ' ')));
             }
         }
-        else if (row.col == kColAfterWindow)
+        else if (row.col == COL_AFTER_WINDOW)
         {
             // Deadline is right of the window: fill all cells with dashes, show arrow.
             for (int c = 0; c < kTimelineSpanDays; ++c)
@@ -473,7 +473,7 @@ ftxui::Element render(
         task_list = vbox(std::move(rows));
     }
 
-    if (state.mode == Mode::DatePicker)
+    if (state.mode == Mode::DATE_PICKER)
     {
         return hbox(
             {std::move(task_list) | flex,
@@ -481,7 +481,7 @@ ftxui::Element render(
         );
     }
 
-    if (state.view_mode == ViewMode::Timeline)
+    if (state.view_mode == ViewMode::TIMELINE)
     {
         return render_timeline(pool, state, visible, now_epoch);
     }
@@ -495,10 +495,10 @@ ftxui::Element render_status_bar(const ViewState &state)
 
     switch (state.mode)
     {
-        case Mode::Normal:
+        case Mode::NORMAL:
             return hbox({text(" NORMAL ") | bold | color(Color::GreenLight), text("  ")});
-        case Mode::Insert:
-            if (state.edit_field == EditField::DueDate)
+        case Mode::INSERT:
+            if (state.edit_field == EditField::DUE_DATE)
             {
                 return hbox(
                     {text(" DATE   ") | bold | color(Color::Cyan),
@@ -513,9 +513,9 @@ ftxui::Element render_status_bar(const ViewState &state)
                  text(state.edit_buffer),
                  text("█") | blink}
             );
-        case Mode::Command:
+        case Mode::COMMAND:
             return hbox({text(":"), text(state.cmd_buffer), text("█") | blink});
-        case Mode::DatePicker:
+        case Mode::DATE_PICKER:
             return hbox({
                 text(" PICK   ") | bold | color(Color::Magenta),
                 text("  h/l:day  j/k:week  [/]:month  t:today  Enter:set  d:clear  i:type  Esc:cancel"),

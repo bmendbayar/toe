@@ -58,7 +58,7 @@ TEST(NodePool, DoubleFreeReportsStaleHandle)
 
     const auto second = pool.free(id);
     ASSERT_FALSE(second.has_value());
-    EXPECT_EQ(second.error(), Error::StaleHandle);
+    EXPECT_EQ(second.error(), Error::STALE_HANDLE);
 }
 
 TEST(NodePool, FreeOutOfRangeHandleReportsStaleHandle)
@@ -67,7 +67,7 @@ TEST(NodePool, FreeOutOfRangeHandleReportsStaleHandle)
     const auto result = pool.free(TaskId{.index = 99, .generation = 1});
 
     ASSERT_FALSE(result.has_value());
-    EXPECT_EQ(result.error(), Error::StaleHandle);
+    EXPECT_EQ(result.error(), Error::STALE_HANDLE);
 }
 
 TEST(NodePool, ReuseReturnsFreshNonAliasingHandle)
@@ -211,7 +211,7 @@ TEST(Tree, AddChildRejectsStaleParent)
 
     const auto result = pool.add_child(root);
     ASSERT_FALSE(result.has_value());
-    EXPECT_EQ(result.error(), Error::StaleHandle);
+    EXPECT_EQ(result.error(), Error::STALE_HANDLE);
 }
 
 TEST(Tree, AddSiblingAfterInsertsInPlace)
@@ -280,7 +280,7 @@ TEST(Tree, AddSiblingBeforeRejectsStaleHandle)
     NodePool pool;
     const TaskId a = pool.add_root();
     ASSERT_TRUE(pool.remove_subtree(a).has_value());
-    EXPECT_EQ(pool.add_sibling_before(a).error(), Error::StaleHandle);
+    EXPECT_EQ(pool.add_sibling_before(a).error(), Error::STALE_HANDLE);
 }
 
 TEST(Tree, FlattenIsDepthFirstPreOrder)
@@ -329,7 +329,7 @@ TEST(Tree, MoveUnderSelfIsRejected)
 
     const auto result = pool.move(a, a);
     ASSERT_FALSE(result.has_value());
-    EXPECT_EQ(result.error(), Error::WouldCreateCycle);
+    EXPECT_EQ(result.error(), Error::WOULD_CREATE_CYCLE);
 }
 
 TEST(Tree, MoveUnderOwnDescendantIsRejected)
@@ -342,7 +342,7 @@ TEST(Tree, MoveUnderOwnDescendantIsRejected)
     // a -> b -> c; moving a under c would splice a cycle.
     const auto result = pool.move(a, c);
     ASSERT_FALSE(result.has_value());
-    EXPECT_EQ(result.error(), Error::WouldCreateCycle);
+    EXPECT_EQ(result.error(), Error::WOULD_CREATE_CYCLE);
 
     // The forest must be untouched by the rejected move.
     EXPECT_EQ(pool.flatten(), (std::vector<TaskId>{a, b, c}));
@@ -355,8 +355,8 @@ TEST(Tree, MoveRejectsStaleHandles)
     const TaskId b = pool.add_root();
     ASSERT_TRUE(pool.remove_subtree(b).has_value());
 
-    EXPECT_EQ(pool.move(b, a).error(), Error::StaleHandle);
-    EXPECT_EQ(pool.move(a, b).error(), Error::StaleHandle);
+    EXPECT_EQ(pool.move(b, a).error(), Error::STALE_HANDLE);
+    EXPECT_EQ(pool.move(a, b).error(), Error::STALE_HANDLE);
 }
 
 TEST(Tree, IndentMakesNodeChildOfPreviousSibling)
@@ -381,7 +381,7 @@ TEST(Tree, IndentFirstSiblingIsRejected)
 
     const auto result = pool.indent(a);
     ASSERT_FALSE(result.has_value());
-    EXPECT_EQ(result.error(), Error::NoPreviousSibling);
+    EXPECT_EQ(result.error(), Error::NO_PREVIOUS_SIBLING);
 }
 
 TEST(Tree, OutdentLiftsAfterFormerParent)
@@ -419,7 +419,7 @@ TEST(Tree, OutdentRootIsRejected)
 
     const auto result = pool.outdent(root);
     ASSERT_FALSE(result.has_value());
-    EXPECT_EQ(result.error(), Error::NoParent);
+    EXPECT_EQ(result.error(), Error::NO_PARENT);
 }
 
 TEST(Tree, RemoveSingleNodeEmptiesForest)
@@ -466,7 +466,7 @@ TEST(Tree, RemoveSubtreeRejectsStaleHandle)
 
     const auto result = pool.remove_subtree(root);
     ASSERT_FALSE(result.has_value());
-    EXPECT_EQ(result.error(), Error::StaleHandle);
+    EXPECT_EQ(result.error(), Error::STALE_HANDLE);
 }
 
 TEST(Tree, RemovedSlotsAreRecycledWithoutAliasing)

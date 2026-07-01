@@ -24,20 +24,20 @@ using namespace toe::ui;
 }
 
 // The calendar math is genuinely constexpr — assert it folds at compile time.
-static_assert(add_days(0, 1) == kSecondsPerDay);
-static_assert(floor_to_day(kSecondsPerDay + 5) == kSecondsPerDay);
-static_assert(floor_to_day(-1) == -kSecondsPerDay);
+static_assert(add_days(0, 1) == SECONDS_PER_DAY);
+static_assert(floor_to_day(SECONDS_PER_DAY + 5) == SECONDS_PER_DAY);
+static_assert(floor_to_day(-1) == -SECONDS_PER_DAY);
 static_assert(
     add_months(ymd_to_epoch(std::chrono::year{2024} / 1 / 31), 1) == ymd_to_epoch(std::chrono::year{2024} / 2 / 29)
 );
-static_assert(due_urgency(0, kSecondsPerDay) == Urgency::Overdue);
+static_assert(due_urgency(0, SECONDS_PER_DAY) == Urgency::OVERDUE);
 
 // --- epoch <-> calendar ------------------------------------------------------
 
 TEST(DateUtil, EpochAnchorMatchesKnownValue)
 {
     // 2024-01-01 00:00:00 UTC is 19723 days past the epoch.
-    EXPECT_EQ(e(2024, 1, 1), std::int64_t{19723} * kSecondsPerDay);
+    EXPECT_EQ(e(2024, 1, 1), std::int64_t{19723} * SECONDS_PER_DAY);
 }
 
 TEST(DateUtil, EpochYmdRoundTrip)
@@ -53,7 +53,7 @@ TEST(DateUtil, FloorToDay)
     EXPECT_EQ(floor_to_day(now_fixture()), e(2024, 6, 15));
     EXPECT_EQ(floor_to_day(e(2024, 6, 15)), e(2024, 6, 15));
     // Negative instants floor toward the earlier day.
-    EXPECT_EQ(floor_to_day(-1), -kSecondsPerDay);
+    EXPECT_EQ(floor_to_day(-1), -SECONDS_PER_DAY);
 }
 
 TEST(DateUtil, AddDays)
@@ -123,17 +123,17 @@ TEST(DateUtil, FormatRelativeDaysAndWeeks)
 TEST(DateUtil, UrgencyClassification)
 {
     const std::int64_t now = now_fixture();
-    EXPECT_EQ(due_urgency(e(2024, 6, 14), now), Urgency::Overdue);
-    EXPECT_EQ(due_urgency(e(2024, 6, 15), now), Urgency::Soon);  // today counts
-    EXPECT_EQ(due_urgency(e(2024, 6, 18), now), Urgency::Soon);  // boundary (3 days)
-    EXPECT_EQ(due_urgency(e(2024, 6, 19), now), Urgency::Normal);
+    EXPECT_EQ(due_urgency(e(2024, 6, 14), now), Urgency::OVERDUE);
+    EXPECT_EQ(due_urgency(e(2024, 6, 15), now), Urgency::SOON);  // today counts
+    EXPECT_EQ(due_urgency(e(2024, 6, 18), now), Urgency::SOON);  // boundary (3 days)
+    EXPECT_EQ(due_urgency(e(2024, 6, 19), now), Urgency::NORMAL);
 }
 
 TEST(DateUtil, UrgencyIgnoresTimeOfDay)
 {
     // A due date stored late in the day is still "today", not overdue.
     const std::int64_t now = e(2024, 6, 15) + 80000;  // late evening
-    EXPECT_EQ(due_urgency(e(2024, 6, 15) + 100, now), Urgency::Soon);
+    EXPECT_EQ(due_urgency(e(2024, 6, 15) + 100, now), Urgency::SOON);
 }
 
 // --- absolute parsing --------------------------------------------------------

@@ -16,33 +16,31 @@ namespace toe::ui
 // FTXUI, no calls to the system clock — "now" is always supplied by the caller
 // so rendering stays deterministic under test.
 
-inline constexpr std::int64_t kSecondsPerDay = 86400;
+inline constexpr std::int64_t SECONDS_PER_DAY = 86400;
 
 // --- epoch <-> calendar ------------------------------------------------------
 
-[[nodiscard]] constexpr std::chrono::year_month_day
-epoch_to_ymd(std::int64_t epoch_seconds) noexcept
+[[nodiscard]] constexpr std::chrono::year_month_day epoch_to_ymd(std::int64_t epoch_seconds) noexcept
 {
     using namespace std::chrono;
     return year_month_day{floor<days>(sys_seconds{seconds{epoch_seconds}})};
 }
 
-[[nodiscard]] constexpr std::int64_t
-ymd_to_epoch(std::chrono::year_month_day ymd) noexcept
+[[nodiscard]] constexpr std::int64_t ymd_to_epoch(std::chrono::year_month_day ymd) noexcept
 {
-    return std::chrono::sys_days{ymd}.time_since_epoch().count() * kSecondsPerDay;
+    return std::chrono::sys_days{ymd}.time_since_epoch().count() * SECONDS_PER_DAY;
 }
 
 // Floor an epoch to the start of its UTC day. Floor division (toward negative
 // infinity) so pre-1970 instants land on the correct day boundary.
 [[nodiscard]] constexpr std::int64_t floor_to_day(std::int64_t epoch_seconds) noexcept
 {
-    std::int64_t q = epoch_seconds / kSecondsPerDay;
-    if (epoch_seconds % kSecondsPerDay != 0 && epoch_seconds < 0)
+    std::int64_t q = epoch_seconds / SECONDS_PER_DAY;
+    if (epoch_seconds % SECONDS_PER_DAY != 0 && epoch_seconds < 0)
     {
         --q;
     }
-    return q * kSecondsPerDay;
+    return q * SECONDS_PER_DAY;
 }
 
 // Midnight UTC of the day containing `now_seconds`.
@@ -53,7 +51,7 @@ ymd_to_epoch(std::chrono::year_month_day ymd) noexcept
 
 [[nodiscard]] constexpr std::int64_t add_days(std::int64_t epoch_seconds, std::int64_t n) noexcept
 {
-    return epoch_seconds + n * kSecondsPerDay;
+    return epoch_seconds + n * SECONDS_PER_DAY;
 }
 
 // Add `n` calendar months, clamping the day-of-month to the target month's last
@@ -108,7 +106,7 @@ struct MonthGrid
 [[nodiscard]] inline std::string format_relative(std::int64_t due_epoch, std::int64_t now_seconds)
 {
     const std::int64_t diff_days =
-        (floor_to_day(due_epoch) - today_epoch(now_seconds)) / kSecondsPerDay;
+        (floor_to_day(due_epoch) - today_epoch(now_seconds)) / SECONDS_PER_DAY;
     if (diff_days == 0)
     {
         return "today";
@@ -138,25 +136,28 @@ struct MonthGrid
 
 enum class Urgency : std::uint8_t
 {
-    Overdue,  // due day is strictly before today
-    Soon,     // due within `soon_days` (today counts)
-    Normal,
+    OVERDUE,  // due day is strictly before today
+    SOON,     // due within `soon_days` (today counts)
+    NORMAL,
 };
 
-[[nodiscard]] constexpr Urgency
-due_urgency(std::int64_t due_epoch, std::int64_t now_seconds, std::int64_t soon_days = 3) noexcept
+[[nodiscard]] constexpr Urgency due_urgency(
+    std::int64_t due_epoch,
+    std::int64_t now_seconds,
+    std::int64_t soon_days = 3
+) noexcept
 {
     const std::int64_t due_day = floor_to_day(due_epoch);
     const std::int64_t today = today_epoch(now_seconds);
     if (due_day < today)
     {
-        return Urgency::Overdue;
+        return Urgency::OVERDUE;
     }
-    if ((due_day - today) / kSecondsPerDay <= soon_days)
+    if ((due_day - today) / SECONDS_PER_DAY <= soon_days)
     {
-        return Urgency::Soon;
+        return Urgency::SOON;
     }
-    return Urgency::Normal;
+    return Urgency::NORMAL;
 }
 
 // --- parsing -----------------------------------------------------------------
@@ -220,8 +221,7 @@ due_urgency(std::int64_t due_epoch, std::int64_t now_seconds, std::int64_t soon_
 //   a weekday abbreviation (mon..sun) — the soonest such day, today inclusive
 //   a signed offset [+-]N(d|w|m) — days, weeks, or months from today
 // Returns std::nullopt if the expression matches none of these.
-[[nodiscard]] inline std::optional<std::int64_t>
-parse_relative_date(std::string_view sv, std::int64_t now_seconds)
+[[nodiscard]] inline std::optional<std::int64_t> parse_relative_date(std::string_view sv, std::int64_t now_seconds)
 {
     using namespace std::chrono;
     const std::int64_t today = today_epoch(now_seconds);
@@ -293,8 +293,7 @@ parse_relative_date(std::string_view sv, std::int64_t now_seconds)
 
 // Unified entry point used by the UI: try absolute "YYYY-MM-DD" first, then the
 // relative grammar. Returns std::nullopt only if neither matches.
-[[nodiscard]] inline std::optional<std::int64_t>
-parse_date_input(std::string_view sv, std::int64_t now_seconds)
+[[nodiscard]] inline std::optional<std::int64_t> parse_date_input(std::string_view sv, std::int64_t now_seconds)
 {
     if (const auto abs = parse_due_date(sv); abs.has_value())
     {

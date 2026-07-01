@@ -11,16 +11,16 @@ namespace toe::core
 
 TEST(Fields, CycleStatusWrapsRing)
 {
-    EXPECT_EQ(cycle_status(Status::Todo), Status::InProgress);
-    EXPECT_EQ(cycle_status(Status::InProgress), Status::Done);
-    EXPECT_EQ(cycle_status(Status::Done), Status::Todo);
+    EXPECT_EQ(cycle_status(Status::TODO), Status::IN_PROGRESS);
+    EXPECT_EQ(cycle_status(Status::IN_PROGRESS), Status::DONE);
+    EXPECT_EQ(cycle_status(Status::DONE), Status::TODO);
 }
 
 TEST(Fields, CyclePriorityWrapsRing)
 {
-    EXPECT_EQ(cycle_priority(Priority::Low), Priority::Medium);
-    EXPECT_EQ(cycle_priority(Priority::Medium), Priority::High);
-    EXPECT_EQ(cycle_priority(Priority::High), Priority::Low);
+    EXPECT_EQ(cycle_priority(Priority::LOW), Priority::MEDIUM);
+    EXPECT_EQ(cycle_priority(Priority::MEDIUM), Priority::HIGH);
+    EXPECT_EQ(cycle_priority(Priority::HIGH), Priority::LOW);
 }
 
 TEST(Fields, DefaultStatusIsTodo)
@@ -28,7 +28,7 @@ TEST(Fields, DefaultStatusIsTodo)
     NodePool pool;
     const TaskId id = pool.add_root();
     ASSERT_TRUE(pool.get_status(id).has_value());
-    EXPECT_EQ(pool.get_status(id).value(), Status::Todo);
+    EXPECT_EQ(pool.get_status(id).value(), Status::TODO);
 }
 
 TEST(Fields, DefaultPriorityIsLow)
@@ -36,7 +36,7 @@ TEST(Fields, DefaultPriorityIsLow)
     NodePool pool;
     const TaskId id = pool.add_root();
     ASSERT_TRUE(pool.get_priority(id).has_value());
-    EXPECT_EQ(pool.get_priority(id).value(), Priority::Low);
+    EXPECT_EQ(pool.get_priority(id).value(), Priority::LOW);
 }
 
 TEST(Fields, DefaultDueDateIsAbsent)
@@ -62,11 +62,11 @@ TEST(Fields, SetAndGetStatus)
     NodePool pool;
     const TaskId id = pool.add_root();
 
-    ASSERT_TRUE(pool.set_status(id, Status::InProgress).has_value());
-    EXPECT_EQ(pool.get_status(id).value(), Status::InProgress);
+    ASSERT_TRUE(pool.set_status(id, Status::IN_PROGRESS).has_value());
+    EXPECT_EQ(pool.get_status(id).value(), Status::IN_PROGRESS);
 
-    ASSERT_TRUE(pool.set_status(id, Status::Done).has_value());
-    EXPECT_EQ(pool.get_status(id).value(), Status::Done);
+    ASSERT_TRUE(pool.set_status(id, Status::DONE).has_value());
+    EXPECT_EQ(pool.get_status(id).value(), Status::DONE);
 }
 
 TEST(Fields, SetAndGetPriority)
@@ -74,11 +74,11 @@ TEST(Fields, SetAndGetPriority)
     NodePool pool;
     const TaskId id = pool.add_root();
 
-    ASSERT_TRUE(pool.set_priority(id, Priority::High).has_value());
-    EXPECT_EQ(pool.get_priority(id).value(), Priority::High);
+    ASSERT_TRUE(pool.set_priority(id, Priority::HIGH).has_value());
+    EXPECT_EQ(pool.get_priority(id).value(), Priority::HIGH);
 
-    ASSERT_TRUE(pool.set_priority(id, Priority::Medium).has_value());
-    EXPECT_EQ(pool.get_priority(id).value(), Priority::Medium);
+    ASSERT_TRUE(pool.set_priority(id, Priority::MEDIUM).has_value());
+    EXPECT_EQ(pool.get_priority(id).value(), Priority::MEDIUM);
 }
 
 TEST(Fields, SetAndGetDueDate)
@@ -126,16 +126,16 @@ TEST(Fields, AdvanceStatusCyclesThroughAllValues)
     // Start at Todo (default).
     auto r = pool.advance_status(id);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(r.value(), Status::InProgress);
-    EXPECT_EQ(pool.get_status(id).value(), Status::InProgress);
+    EXPECT_EQ(r.value(), Status::IN_PROGRESS);
+    EXPECT_EQ(pool.get_status(id).value(), Status::IN_PROGRESS);
 
     r = pool.advance_status(id);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(r.value(), Status::Done);
+    EXPECT_EQ(r.value(), Status::DONE);
 
     r = pool.advance_status(id);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(r.value(), Status::Todo);  // wrapped
+    EXPECT_EQ(r.value(), Status::TODO);  // wrapped
 }
 
 TEST(Fields, AdvancePriorityCyclesThroughAllValues)
@@ -146,16 +146,16 @@ TEST(Fields, AdvancePriorityCyclesThroughAllValues)
     // Start at Low (default).
     auto r = pool.advance_priority(id);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(r.value(), Priority::Medium);
-    EXPECT_EQ(pool.get_priority(id).value(), Priority::Medium);
+    EXPECT_EQ(r.value(), Priority::MEDIUM);
+    EXPECT_EQ(pool.get_priority(id).value(), Priority::MEDIUM);
 
     r = pool.advance_priority(id);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(r.value(), Priority::High);
+    EXPECT_EQ(r.value(), Priority::HIGH);
 
     r = pool.advance_priority(id);
     ASSERT_TRUE(r.has_value());
-    EXPECT_EQ(r.value(), Priority::Low);  // wrapped
+    EXPECT_EQ(r.value(), Priority::LOW);  // wrapped
 }
 
 TEST(Fields, SetDescriptionOverwritesPreviousValue)
@@ -203,7 +203,7 @@ TEST(Fields, SetDescriptionRejectsEmpty)
 
     const auto result = pool.set_description(id, "");
     ASSERT_FALSE(result.has_value());
-    EXPECT_EQ(result.error(), Error::EmptyDescription);
+    EXPECT_EQ(result.error(), Error::EMPTY_DESCRIPTION);
 }
 
 TEST(Fields, SetDescriptionRejectsTooLong)
@@ -211,10 +211,10 @@ TEST(Fields, SetDescriptionRejectsTooLong)
     NodePool pool;
     const TaskId id = pool.add_root();
 
-    const std::string too_long(kMaxDescriptionBytes + 1, 'x');
+    const std::string too_long(MAX_DESCRIPTION_BYTES + 1, 'x');
     const auto result = pool.set_description(id, too_long);
     ASSERT_FALSE(result.has_value());
-    EXPECT_EQ(result.error(), Error::DescriptionTooLong);
+    EXPECT_EQ(result.error(), Error::DESCRIPTION_TOO_LONG);
 }
 
 TEST(Fields, SetDescriptionAtExactLimitSucceeds)
@@ -222,9 +222,9 @@ TEST(Fields, SetDescriptionAtExactLimitSucceeds)
     NodePool pool;
     const TaskId id = pool.add_root();
 
-    const std::string at_limit(kMaxDescriptionBytes, 'y');
+    const std::string at_limit(MAX_DESCRIPTION_BYTES, 'y');
     EXPECT_TRUE(pool.set_description(id, at_limit).has_value());
-    EXPECT_EQ(pool.get_description(id).value().size(), kMaxDescriptionBytes);
+    EXPECT_EQ(pool.get_description(id).value().size(), MAX_DESCRIPTION_BYTES);
 }
 
 TEST(Fields, GetStatusRejectsStaleHandle)
@@ -235,7 +235,7 @@ TEST(Fields, GetStatusRejectsStaleHandle)
 
     const auto result = pool.get_status(id);
     ASSERT_FALSE(result.has_value());
-    EXPECT_EQ(result.error(), Error::StaleHandle);
+    EXPECT_EQ(result.error(), Error::STALE_HANDLE);
 }
 
 TEST(Fields, SetStatusRejectsStaleHandle)
@@ -244,9 +244,9 @@ TEST(Fields, SetStatusRejectsStaleHandle)
     const TaskId id = pool.add_root();
     ASSERT_TRUE(pool.remove_subtree(id).has_value());
 
-    const auto result = pool.set_status(id, Status::Done);
+    const auto result = pool.set_status(id, Status::DONE);
     ASSERT_FALSE(result.has_value());
-    EXPECT_EQ(result.error(), Error::StaleHandle);
+    EXPECT_EQ(result.error(), Error::STALE_HANDLE);
 }
 
 TEST(Fields, AdvanceStatusRejectsStaleHandle)
@@ -257,7 +257,7 @@ TEST(Fields, AdvanceStatusRejectsStaleHandle)
 
     const auto result = pool.advance_status(id);
     ASSERT_FALSE(result.has_value());
-    EXPECT_EQ(result.error(), Error::StaleHandle);
+    EXPECT_EQ(result.error(), Error::STALE_HANDLE);
 }
 
 TEST(Fields, GetPriorityRejectsStaleHandle)
@@ -268,7 +268,7 @@ TEST(Fields, GetPriorityRejectsStaleHandle)
 
     const auto result = pool.get_priority(id);
     ASSERT_FALSE(result.has_value());
-    EXPECT_EQ(result.error(), Error::StaleHandle);
+    EXPECT_EQ(result.error(), Error::STALE_HANDLE);
 }
 
 TEST(Fields, SetPriorityRejectsStaleHandle)
@@ -277,9 +277,9 @@ TEST(Fields, SetPriorityRejectsStaleHandle)
     const TaskId id = pool.add_root();
     ASSERT_TRUE(pool.remove_subtree(id).has_value());
 
-    const auto result = pool.set_priority(id, Priority::High);
+    const auto result = pool.set_priority(id, Priority::HIGH);
     ASSERT_FALSE(result.has_value());
-    EXPECT_EQ(result.error(), Error::StaleHandle);
+    EXPECT_EQ(result.error(), Error::STALE_HANDLE);
 }
 
 TEST(Fields, AdvancePriorityRejectsStaleHandle)
@@ -290,7 +290,7 @@ TEST(Fields, AdvancePriorityRejectsStaleHandle)
 
     const auto result = pool.advance_priority(id);
     ASSERT_FALSE(result.has_value());
-    EXPECT_EQ(result.error(), Error::StaleHandle);
+    EXPECT_EQ(result.error(), Error::STALE_HANDLE);
 }
 
 TEST(Fields, GetDueDateRejectsStaleHandle)
@@ -301,7 +301,7 @@ TEST(Fields, GetDueDateRejectsStaleHandle)
 
     const auto result = pool.get_due_date(id);
     ASSERT_FALSE(result.has_value());
-    EXPECT_EQ(result.error(), Error::StaleHandle);
+    EXPECT_EQ(result.error(), Error::STALE_HANDLE);
 }
 
 TEST(Fields, SetDueDateRejectsStaleHandle)
@@ -312,7 +312,7 @@ TEST(Fields, SetDueDateRejectsStaleHandle)
 
     const auto result = pool.set_due_date(id, 0LL);
     ASSERT_FALSE(result.has_value());
-    EXPECT_EQ(result.error(), Error::StaleHandle);
+    EXPECT_EQ(result.error(), Error::STALE_HANDLE);
 }
 
 TEST(Fields, GetDescriptionRejectsStaleHandle)
@@ -323,7 +323,7 @@ TEST(Fields, GetDescriptionRejectsStaleHandle)
 
     const auto result = pool.get_description(id);
     ASSERT_FALSE(result.has_value());
-    EXPECT_EQ(result.error(), Error::StaleHandle);
+    EXPECT_EQ(result.error(), Error::STALE_HANDLE);
 }
 
 TEST(Fields, SetDescriptionRejectsStaleHandle)
@@ -334,7 +334,7 @@ TEST(Fields, SetDescriptionRejectsStaleHandle)
 
     const auto result = pool.set_description(id, "hello");
     ASSERT_FALSE(result.has_value());
-    EXPECT_EQ(result.error(), Error::StaleHandle);
+    EXPECT_EQ(result.error(), Error::STALE_HANDLE);
 }
 
 // When a freed slot is reused, its fields must be reset to defaults, not
@@ -344,8 +344,8 @@ TEST(Fields, FreedSlotFieldsResetOnReuse)
     NodePool pool;
     const TaskId first = pool.add_root();
 
-    ASSERT_TRUE(pool.set_status(first, Status::Done).has_value());
-    ASSERT_TRUE(pool.set_priority(first, Priority::High).has_value());
+    ASSERT_TRUE(pool.set_status(first, Status::DONE).has_value());
+    ASSERT_TRUE(pool.set_priority(first, Priority::HIGH).has_value());
     ASSERT_TRUE(pool.set_due_date(first, 9'999'999LL).has_value());
     ASSERT_TRUE(pool.set_description(first, "stale data").has_value());
 
@@ -353,8 +353,8 @@ TEST(Fields, FreedSlotFieldsResetOnReuse)
 
     // The recycled slot must not expose the previous occupant's fields.
     const TaskId reused = pool.add_root();
-    EXPECT_EQ(pool.get_status(reused).value(), Status::Todo);
-    EXPECT_EQ(pool.get_priority(reused).value(), Priority::Low);
+    EXPECT_EQ(pool.get_status(reused).value(), Status::TODO);
+    EXPECT_EQ(pool.get_priority(reused).value(), Priority::LOW);
     EXPECT_FALSE(pool.get_due_date(reused).value().has_value());
     EXPECT_TRUE(pool.get_description(reused).value().empty());
 }

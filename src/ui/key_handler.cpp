@@ -57,7 +57,12 @@ compute_visible(const core::NodePool &pool, const FoldSet &folded)
     return static_cast<std::size_t>(it - visible.begin());
 }
 
-EventResult handle_normal(ViewState &state, const std::vector<core::TaskId> &visible, const ftxui::Event &event, std::int64_t now_seconds)
+EventResult handle_normal(
+    ViewState &state,
+    const std::vector<core::TaskId> &visible,
+    const ftxui::Event &event,
+    std::int64_t now_seconds
+)
 {
     const auto reset_d = [&] { state.pending_d = false; };
 
@@ -136,8 +141,8 @@ EventResult handle_normal(ViewState &state, const std::vector<core::TaskId> &vis
     if (event == ftxui::Event::i)
     {
         reset_d();
-        state.mode = Mode::Insert;
-        state.edit_field = EditField::Description;
+        state.mode = Mode::INSERT;
+        state.edit_field = EditField::DESCRIPTION;
         state.edit_buffer.clear();
         return {.consumed = true, .command = std::nullopt};
     }
@@ -214,7 +219,7 @@ EventResult handle_normal(ViewState &state, const std::vector<core::TaskId> &vis
     if (event == ftxui::Event::Character(':'))
     {
         reset_d();
-        state.mode = Mode::Command;
+        state.mode = Mode::COMMAND;
         state.cmd_buffer.clear();
         return {.consumed = true, .command = std::nullopt};
     }
@@ -230,20 +235,20 @@ EventResult handle_normal(ViewState &state, const std::vector<core::TaskId> &vis
     if (event == ftxui::Event::T)
     {
         reset_d();
-        if (state.view_mode == ViewMode::Tree)
+        if (state.view_mode == ViewMode::TREE)
         {
-            state.view_mode = ViewMode::Timeline;
+            state.view_mode = ViewMode::TIMELINE;
             state.timeline_start_epoch = today_epoch(now_seconds);
         }
         else
         {
-            state.view_mode = ViewMode::Tree;
+            state.view_mode = ViewMode::TREE;
         }
         return {.consumed = true, .command = std::nullopt};
     }
 
     // [ / ] - scroll timeline window when in Timeline view
-    if (state.view_mode == ViewMode::Timeline)
+    if (state.view_mode == ViewMode::TIMELINE)
     {
         if (event == ftxui::Event::Character('['))
         {
@@ -274,8 +279,8 @@ EventResult handle_insert(ViewState &state, const ftxui::Event &event)
 {
     if (event == ftxui::Event::Escape)
     {
-        state.mode = Mode::Normal;
-        state.edit_field = EditField::Description;
+        state.mode = Mode::NORMAL;
+        state.edit_field = EditField::DESCRIPTION;
         state.edit_buffer.clear();
         return {.consumed = true, .command = std::nullopt};
     }
@@ -284,10 +289,10 @@ EventResult handle_insert(ViewState &state, const ftxui::Event &event)
     {
         std::string text = std::move(state.edit_buffer);
         state.edit_buffer.clear();
-        state.mode = Mode::Normal;
+        state.mode = Mode::NORMAL;
         const EditField field = state.edit_field;
-        state.edit_field = EditField::Description;
-        if (field == EditField::DueDate)
+        state.edit_field = EditField::DESCRIPTION;
+        if (field == EditField::DUE_DATE)
         {
             return {.consumed = true, .command = Command{CmdCommitDueDate{.text = std::move(text)}}};
         }
@@ -316,7 +321,7 @@ EventResult handle_command(ViewState &state, const ftxui::Event &event, std::int
 {
     if (event == ftxui::Event::Escape)
     {
-        state.mode = Mode::Normal;
+        state.mode = Mode::NORMAL;
         state.cmd_buffer.clear();
         return {.consumed = true, .command = std::nullopt};
     }
@@ -325,7 +330,7 @@ EventResult handle_command(ViewState &state, const ftxui::Event &event, std::int
     {
         std::string cmd = std::move(state.cmd_buffer);
         state.cmd_buffer.clear();
-        state.mode = Mode::Normal;
+        state.mode = Mode::NORMAL;
 
         std::optional<Command> command;
         if (cmd == "w")
@@ -346,12 +351,12 @@ EventResult handle_command(ViewState &state, const ftxui::Event &event, std::int
         }
         else if (cmd == "timeline")
         {
-            state.view_mode = ViewMode::Timeline;
+            state.view_mode = ViewMode::TIMELINE;
             state.timeline_start_epoch = today_epoch(now_seconds);
         }
         else if (cmd == "tree")
         {
-            state.view_mode = ViewMode::Tree;
+            state.view_mode = ViewMode::TREE;
         }
         return {.consumed = true, .command = std::move(command)};
     }
@@ -429,14 +434,14 @@ EventResult handle_date_picker(ViewState &state, const ftxui::Event &event, std:
     if (event == ftxui::Event::Return)
     {
         std::string date_text = format_due_date(state.picker.view_epoch);
-        state.mode = Mode::Normal;
+        state.mode = Mode::NORMAL;
         return {.consumed = true, .command = Command{CmdCommitDueDate{.text = std::move(date_text)}}};
     }
 
     // d - clear date
     if (event == ftxui::Event::d)
     {
-        state.mode = Mode::Normal;
+        state.mode = Mode::NORMAL;
         return {.consumed = true, .command = Command{CmdCommitDueDate{.text = ""}}};
     }
 
@@ -444,15 +449,15 @@ EventResult handle_date_picker(ViewState &state, const ftxui::Event &event, std:
     if (event == ftxui::Event::i)
     {
         state.edit_buffer = format_due_date(state.picker.view_epoch);
-        state.edit_field = EditField::DueDate;
-        state.mode = Mode::Insert;
+        state.edit_field = EditField::DUE_DATE;
+        state.mode = Mode::INSERT;
         return {.consumed = true, .command = std::nullopt};
     }
 
     // Esc - cancel picker, leave date unchanged
     if (event == ftxui::Event::Escape)
     {
-        state.mode = Mode::Normal;
+        state.mode = Mode::NORMAL;
         return {.consumed = true, .command = std::nullopt};
     }
 
@@ -470,13 +475,13 @@ EventResult process_event(
 {
     switch (state.mode)
     {
-        case Mode::Normal:
+        case Mode::NORMAL:
             return handle_normal(state, visible, event, now_seconds);
-        case Mode::Insert:
+        case Mode::INSERT:
             return handle_insert(state, event);
-        case Mode::Command:
+        case Mode::COMMAND:
             return handle_command(state, event, now_seconds);
-        case Mode::DatePicker:
+        case Mode::DATE_PICKER:
             return handle_date_picker(state, event, now_seconds);
     }
     return {.consumed = false, .command = std::nullopt};
@@ -509,8 +514,8 @@ std::expected<void, core::Error> apply_command(
                     }
                     state.cursor = *result;
                 }
-                state.mode = Mode::Insert;
-                state.edit_field = EditField::Description;
+                state.mode = Mode::INSERT;
+                state.edit_field = EditField::DESCRIPTION;
                 state.edit_buffer.clear();
                 return {};
             }
@@ -530,8 +535,8 @@ std::expected<void, core::Error> apply_command(
                     }
                     state.cursor = *result;
                 }
-                state.mode = Mode::Insert;
-                state.edit_field = EditField::Description;
+                state.mode = Mode::INSERT;
+                state.edit_field = EditField::DESCRIPTION;
                 state.edit_buffer.clear();
                 return {};
             }
@@ -619,9 +624,9 @@ std::expected<void, core::Error> apply_command(
                 {
                     return std::unexpected(status.error());
                 }
-                const core::Status next = (*status == core::Status::Done)
-                                              ? core::Status::Todo
-                                              : core::Status::Done;
+                const core::Status next = (*status == core::Status::DONE)
+                                              ? core::Status::TODO
+                                              : core::Status::DONE;
                 return pool.set_status(state.cursor, next);
             }
 
@@ -674,7 +679,7 @@ std::expected<void, core::Error> apply_command(
                 state.picker.view_epoch = date_result->has_value()
                                               ? **date_result
                                               : today_epoch(now_seconds);
-                state.mode = Mode::DatePicker;
+                state.mode = Mode::DATE_PICKER;
                 return {};
             }
 

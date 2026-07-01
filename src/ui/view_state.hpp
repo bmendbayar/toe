@@ -11,16 +11,16 @@ namespace toe::ui
 
 enum class Mode : std::uint8_t
 {
-    Normal,
-    Insert,
-    Command,
-    DatePicker,
+    NORMAL,
+    INSERT,
+    COMMAND,
+    DATE_PICKER,
 };
 
 enum class ViewMode : std::uint8_t
 {
-    Tree,
-    Timeline,
+    TREE,
+    TIMELINE,
 };
 
 struct TaskIdHash
@@ -37,8 +37,8 @@ using FoldSet = std::unordered_set<core::TaskId, TaskIdHash>;
 
 enum class EditField : std::uint8_t
 {
-    Description,
-    DueDate,
+    DESCRIPTION,
+    DUE_DATE,
 };
 
 struct DatePickerState
@@ -48,9 +48,9 @@ struct DatePickerState
 
 struct ViewState
 {
-    Mode mode = Mode::Normal;
-    ViewMode view_mode = ViewMode::Tree;
-    EditField edit_field = EditField::Description;  // which field 'i'/D edits
+    Mode mode = Mode::NORMAL;
+    ViewMode view_mode = ViewMode::TREE;
+    EditField edit_field = EditField::DESCRIPTION;  // which field 'i'/D edits
     core::TaskId cursor;                            // focused task; invalid() = no focus
     FoldSet folded;                                 // roots of collapsed subtrees
     std::string edit_buffer;                        // accumulator in Insert mode

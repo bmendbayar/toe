@@ -32,7 +32,7 @@ static const std::int64_t kStart = ymd_to_epoch(
 
 TEST(Timeline, DateOnStartIsDayZero)
 {
-    const DatedTask t = make_task(kStart, 0, Priority::Low, Urgency::Normal);
+    const DatedTask t = make_task(kStart, 0, Priority::LOW, Urgency::NORMAL);
     const auto rows = layout_timeline({&t, 1}, kStart, 7);
     ASSERT_EQ(rows.size(), 1u);
     EXPECT_EQ(rows[0].col, 0);
@@ -40,7 +40,7 @@ TEST(Timeline, DateOnStartIsDayZero)
 
 TEST(Timeline, DateOnLastDayIsSpanMinusOne)
 {
-    const DatedTask t = make_task(kStart, 6, Priority::Low, Urgency::Normal);
+    const DatedTask t = make_task(kStart, 6, Priority::LOW, Urgency::NORMAL);
     const auto rows = layout_timeline({&t, 1}, kStart, 7);
     ASSERT_EQ(rows.size(), 1u);
     EXPECT_EQ(rows[0].col, 6);
@@ -49,9 +49,9 @@ TEST(Timeline, DateOnLastDayIsSpanMinusOne)
 TEST(Timeline, MultipleDatesMapToCorrectColumns)
 {
     const DatedTask tasks[] = {
-        make_task(kStart, 0, Priority::Low, Urgency::Normal),
-        make_task(kStart, 3, Priority::Low, Urgency::Normal),
-        make_task(kStart, 6, Priority::Low, Urgency::Normal),
+        make_task(kStart, 0, Priority::LOW, Urgency::NORMAL),
+        make_task(kStart, 3, Priority::LOW, Urgency::NORMAL),
+        make_task(kStart, 6, Priority::LOW, Urgency::NORMAL),
     };
     const auto rows = layout_timeline(tasks, kStart, 7);
     ASSERT_EQ(rows.size(), 3u);
@@ -63,9 +63,9 @@ TEST(Timeline, MultipleDatesMapToCorrectColumns)
 TEST(Timeline, PreservesInputOrder)
 {
     const DatedTask tasks[] = {
-        make_task(kStart, 5, Priority::Low, Urgency::Normal),
-        make_task(kStart, 1, Priority::Low, Urgency::Normal),
-        make_task(kStart, 3, Priority::Low, Urgency::Normal),
+        make_task(kStart, 5, Priority::LOW, Urgency::NORMAL),
+        make_task(kStart, 1, Priority::LOW, Urgency::NORMAL),
+        make_task(kStart, 3, Priority::LOW, Urgency::NORMAL),
     };
     const auto rows = layout_timeline(tasks, kStart, 7);
     ASSERT_EQ(rows.size(), 3u);
@@ -78,34 +78,34 @@ TEST(Timeline, PreservesInputOrder)
 
 TEST(Timeline, BeforeWindowReturnsColBeforeWindow)
 {
-    const DatedTask t = make_task(kStart, -1, Priority::Low, Urgency::Overdue);
+    const DatedTask t = make_task(kStart, -1, Priority::LOW, Urgency::OVERDUE);
     const auto rows = layout_timeline({&t, 1}, kStart, 7);
     ASSERT_EQ(rows.size(), 1u);
-    EXPECT_EQ(rows[0].col, kColBeforeWindow);
+    EXPECT_EQ(rows[0].col, COL_BEFORE_WINDOW);
 }
 
 TEST(Timeline, AfterWindowReturnsColAfterWindow)
 {
-    const DatedTask t = make_task(kStart, 7, Priority::Low, Urgency::Normal);
+    const DatedTask t = make_task(kStart, 7, Priority::LOW, Urgency::NORMAL);
     const auto rows = layout_timeline({&t, 1}, kStart, 7);
     ASSERT_EQ(rows.size(), 1u);
-    EXPECT_EQ(rows[0].col, kColAfterWindow);
+    EXPECT_EQ(rows[0].col, COL_AFTER_WINDOW);
 }
 
 TEST(Timeline, FarBeforeWindowIsClamped)
 {
-    const DatedTask t = make_task(kStart, -100, Priority::Low, Urgency::Overdue);
+    const DatedTask t = make_task(kStart, -100, Priority::LOW, Urgency::OVERDUE);
     const auto rows = layout_timeline({&t, 1}, kStart, 14);
     ASSERT_EQ(rows.size(), 1u);
-    EXPECT_EQ(rows[0].col, kColBeforeWindow);
+    EXPECT_EQ(rows[0].col, COL_BEFORE_WINDOW);
 }
 
 TEST(Timeline, FarAfterWindowIsClamped)
 {
-    const DatedTask t = make_task(kStart, 100, Priority::Low, Urgency::Normal);
+    const DatedTask t = make_task(kStart, 100, Priority::LOW, Urgency::NORMAL);
     const auto rows = layout_timeline({&t, 1}, kStart, 14);
     ASSERT_EQ(rows.size(), 1u);
-    EXPECT_EQ(rows[0].col, kColAfterWindow);
+    EXPECT_EQ(rows[0].col, COL_AFTER_WINDOW);
 }
 
 TEST(Timeline, EmptyInputReturnsEmpty)
@@ -117,64 +117,64 @@ TEST(Timeline, EmptyInputReturnsEmpty)
 TEST(Timeline, MixedWindowClamping)
 {
     const DatedTask tasks[] = {
-        make_task(kStart, -2, Priority::Low, Urgency::Overdue),  // before
-        make_task(kStart, 0, Priority::Low, Urgency::Normal),    // in window
-        make_task(kStart, 6, Priority::Low, Urgency::Normal),    // in window (last)
-        make_task(kStart, 7, Priority::Low, Urgency::Normal),    // after
+        make_task(kStart, -2, Priority::LOW, Urgency::OVERDUE),  // before
+        make_task(kStart, 0, Priority::LOW, Urgency::NORMAL),    // in window
+        make_task(kStart, 6, Priority::LOW, Urgency::NORMAL),    // in window (last)
+        make_task(kStart, 7, Priority::LOW, Urgency::NORMAL),    // after
     };
     const auto rows = layout_timeline(tasks, kStart, 7);
     ASSERT_EQ(rows.size(), 4u);
-    EXPECT_EQ(rows[0].col, kColBeforeWindow);
+    EXPECT_EQ(rows[0].col, COL_BEFORE_WINDOW);
     EXPECT_EQ(rows[1].col, 0);
     EXPECT_EQ(rows[2].col, 6);
-    EXPECT_EQ(rows[3].col, kColAfterWindow);
+    EXPECT_EQ(rows[3].col, COL_AFTER_WINDOW);
 }
 
 // --- timeline_row_color: priority / urgency selection ------------------------
 
 TEST(TimelineRowColor, OverdueTakesPrecedenceOverLowPriority)
 {
-    EXPECT_EQ(timeline_row_color(Priority::Low, Urgency::Overdue), RowColor::Overdue);
+    EXPECT_EQ(timeline_row_color(Priority::LOW, Urgency::OVERDUE), RowColor::OVERDUE);
 }
 
 TEST(TimelineRowColor, OverdueTakesPrecedenceOverHighPriority)
 {
-    EXPECT_EQ(timeline_row_color(Priority::High, Urgency::Overdue), RowColor::Overdue);
+    EXPECT_EQ(timeline_row_color(Priority::HIGH, Urgency::OVERDUE), RowColor::OVERDUE);
 }
 
 TEST(TimelineRowColor, OverdueTakesPrecedenceOverMediumPriority)
 {
-    EXPECT_EQ(timeline_row_color(Priority::Medium, Urgency::Overdue), RowColor::Overdue);
+    EXPECT_EQ(timeline_row_color(Priority::MEDIUM, Urgency::OVERDUE), RowColor::OVERDUE);
 }
 
 TEST(TimelineRowColor, HighPriorityNormal)
 {
-    EXPECT_EQ(timeline_row_color(Priority::High, Urgency::Normal), RowColor::HighPriority);
+    EXPECT_EQ(timeline_row_color(Priority::HIGH, Urgency::NORMAL), RowColor::HIGH_PRIORITY);
 }
 
 TEST(TimelineRowColor, HighPrioritySoon)
 {
-    EXPECT_EQ(timeline_row_color(Priority::High, Urgency::Soon), RowColor::HighPriority);
+    EXPECT_EQ(timeline_row_color(Priority::HIGH, Urgency::SOON), RowColor::HIGH_PRIORITY);
 }
 
 TEST(TimelineRowColor, MediumPriorityNormal)
 {
-    EXPECT_EQ(timeline_row_color(Priority::Medium, Urgency::Normal), RowColor::MediumPriority);
+    EXPECT_EQ(timeline_row_color(Priority::MEDIUM, Urgency::NORMAL), RowColor::MEDIUM_PRIORITY);
 }
 
 TEST(TimelineRowColor, MediumPrioritySoon)
 {
-    EXPECT_EQ(timeline_row_color(Priority::Medium, Urgency::Soon), RowColor::MediumPriority);
+    EXPECT_EQ(timeline_row_color(Priority::MEDIUM, Urgency::SOON), RowColor::MEDIUM_PRIORITY);
 }
 
 TEST(TimelineRowColor, LowPriorityNormalIsNormalColor)
 {
-    EXPECT_EQ(timeline_row_color(Priority::Low, Urgency::Normal), RowColor::Normal);
+    EXPECT_EQ(timeline_row_color(Priority::LOW, Urgency::NORMAL), RowColor::NORMAL);
 }
 
 TEST(TimelineRowColor, LowPrioritySoonIsNormalColor)
 {
-    EXPECT_EQ(timeline_row_color(Priority::Low, Urgency::Soon), RowColor::Normal);
+    EXPECT_EQ(timeline_row_color(Priority::LOW, Urgency::SOON), RowColor::NORMAL);
 }
 
 // --- TimelineRow carries correct metadata ------------------------------------
@@ -184,15 +184,15 @@ TEST(Timeline, RowCarriesDescriptionPriorityUrgency)
     DatedTask t{
         .id = TaskId::invalid(),
         .due_epoch = add_days(kStart, 2),
-        .priority = Priority::High,
-        .urgency = Urgency::Soon,
+        .priority = Priority::HIGH,
+        .urgency = Urgency::SOON,
         .description = "important task",
     };
     const auto rows = layout_timeline({&t, 1}, kStart, 7);
     ASSERT_EQ(rows.size(), 1u);
     EXPECT_EQ(rows[0].col, 2);
-    EXPECT_EQ(rows[0].priority, Priority::High);
-    EXPECT_EQ(rows[0].urgency, Urgency::Soon);
+    EXPECT_EQ(rows[0].priority, Priority::HIGH);
+    EXPECT_EQ(rows[0].urgency, Urgency::SOON);
     EXPECT_EQ(rows[0].description, "important task");
 }
 
