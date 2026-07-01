@@ -475,7 +475,10 @@ ftxui::Element render(
 
     if (state.mode == Mode::DatePicker)
     {
-        return hbox({std::move(task_list) | flex, render_calendar(state, now_epoch)});
+        return hbox(
+            {std::move(task_list) | flex,
+             vbox({render_calendar(state, now_epoch), filler()})}
+        );
     }
 
     if (state.view_mode == ViewMode::Timeline)
