@@ -216,7 +216,7 @@ EventResult handle_normal(
     }
 
     // : - enter Command mode
-    if (event == ftxui::Event::Character(':'))
+    if (event == ftxui::Event::Character(';'))
     {
         reset_d();
         state.mode = Mode::COMMAND;
