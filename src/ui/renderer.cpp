@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdio>
@@ -465,10 +466,11 @@ ftxui::Element render(
     else
     {
         Elements rows;
-        rows.reserve(visible.size());
-        for (const core::TaskId id : visible)
+        const std::size_t first = std::min(state.tree_scroll, visible.size() - 1);
+        rows.reserve(visible.size() - first);
+        for (std::size_t i = first; i < visible.size(); ++i)
         {
-            rows.push_back(render_row(pool, state, id, now_epoch));
+            rows.push_back(render_row(pool, state, visible[i], now_epoch));
         }
         task_list = vbox(std::move(rows));
     }

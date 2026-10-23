@@ -58,6 +58,7 @@ struct ViewState
     bool pending_d = false;                         // 'd' pressed once; second 'd' fires CmdDeleteTask
     DatePickerState picker;
     std::int64_t timeline_start_epoch = 0;  // first visible day in Timeline view
+    std::size_t tree_scroll = 0;            // index into `visible` of the top row drawn in Tree view
 };
 
 }  // namespace toe::ui

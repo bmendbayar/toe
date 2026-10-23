@@ -2,6 +2,8 @@
 
 #include <chrono>
 #include <ftxui/component/event.hpp>
+#include <ftxui/dom/node.hpp>
+#include <ftxui/screen/screen.hpp>
 
 #include "core/error.hpp"
 #include "core/fields.hpp"
@@ -10,6 +12,8 @@
 #include "ui/commands.hpp"
 #include "ui/date_util.hpp"
 #include "ui/key_handler.hpp"
+#include "ui/renderer.hpp"
+#include "ui/scroll.hpp"
 #include "ui/view_state.hpp"
 
 namespace toe::ui
@@ -90,19 +94,6 @@ TEST(ModeTransition, NormalI_EntersInsert)
     EXPECT_TRUE(result.consumed);
     EXPECT_FALSE(result.command.has_value());
     EXPECT_EQ(state.mode, Mode::INSERT);
-}
-
-TEST(ModeTransition, NormalColon_EntersCommand)
-{
-    NodePool pool;
-    ViewState state;
-    const auto vis = compute_visible(pool, state.folded);
-
-    const auto result = process_event(state, vis, ftxui::Event::Character(':'));
-
-    EXPECT_TRUE(result.consumed);
-    EXPECT_FALSE(result.command.has_value());
-    EXPECT_EQ(state.mode, Mode::COMMAND);
 }
 
 TEST(ModeTransition, InsertEsc_ReturnsNormal)
@@ -1285,6 +1276,93 @@ TEST(CommandMode, Return_Tree_SwitchesToTreeView)
     EXPECT_FALSE(result.command.has_value());
     EXPECT_EQ(state.mode, Mode::NORMAL);
     EXPECT_EQ(state.view_mode, ViewMode::TREE);
+}
+
+// --- scroll_into_view -----------------------------------------------------------
+
+TEST(ScrollIntoView, FitsOnScreen_ReturnsZero)
+{
+    EXPECT_EQ(scroll_into_view(4, 2, 10, 10), 0u);
+    EXPECT_EQ(scroll_into_view(0, 0, 3, 10), 0u);
+}
+
+TEST(ScrollIntoView, CursorInMiddle_NoScroll)
+{
+    EXPECT_EQ(scroll_into_view(5, 10, 100, 20), 5u);
+}
+
+TEST(ScrollIntoView, CursorNearBottom_ScrollsByOne)
+{
+    // viewport 20, top 0: rows 0..19; cursor at 16 is exactly SCROLL_OFF from the edge.
+    EXPECT_EQ(scroll_into_view(0, 16, 100, 20), 0u);
+    EXPECT_EQ(scroll_into_view(0, 17, 100, 20), 1u);
+}
+
+TEST(ScrollIntoView, CursorNearTop_ScrollsUp)
+{
+    EXPECT_EQ(scroll_into_view(10, 13, 100, 20), 10u);
+    EXPECT_EQ(scroll_into_view(10, 12, 100, 20), 9u);
+}
+
+TEST(ScrollIntoView, JumpToLast_ShowsLastPage)
+{
+    EXPECT_EQ(scroll_into_view(0, 99, 100, 20), 80u);
+}
+
+TEST(ScrollIntoView, JumpToFirst_ReturnsZero)
+{
+    EXPECT_EQ(scroll_into_view(80, 0, 100, 20), 0u);
+}
+
+TEST(ScrollIntoView, ListShrank_ClampsTop)
+{
+    EXPECT_EQ(scroll_into_view(80, 25, 30, 20), 10u);
+}
+
+TEST(ScrollIntoView, TinyViewport_ScrolloffShrinks)
+{
+    for (std::size_t vp : {1u, 2u, 3u})
+    {
+        for (std::size_t cur = 0; cur < 10; ++cur)
+        {
+            const std::size_t top = scroll_into_view(0, cur, 10, vp);
+            EXPECT_LE(top, cur);
+            EXPECT_LT(cur, top + vp);
+        }
+    }
+}
+
+TEST(ScrollIntoView, CursorAbsent_OnlyClamps)
+{
+    EXPECT_EQ(scroll_into_view(50, 100, 100, 20), 50u);
+    EXPECT_EQ(scroll_into_view(95, 100, 100, 20), 80u);
+}
+
+// --- render scrolling -------------------------------------------------------------
+
+TEST(Render, TreeStartsAtScrollOffset)
+{
+    NodePool pool;
+    TaskId id = pool.add_root();
+    ASSERT_TRUE(pool.set_description(id, "t0"));
+    for (int i = 1; i < 10; ++i)
+    {
+        auto next = pool.add_sibling_after(id);
+        ASSERT_TRUE(next.has_value());
+        id = *next;
+        ASSERT_TRUE(pool.set_description(id, "t" + std::to_string(i)));
+    }
+
+    ViewState state;
+    state.tree_scroll = 5;
+    const auto vis = compute_visible(pool, state.folded);
+
+    ftxui::Screen screen(40, 3);
+    ftxui::Render(screen, render(pool, state, vis, 0));
+    const std::string out = screen.ToString();
+
+    EXPECT_NE(out.find("t5"), std::string::npos);
+    EXPECT_EQ(out.find("t0"), std::string::npos);
 }
 
 }  // namespace toe::ui

@@ -13,6 +13,7 @@ namespace toe::ui
 // Produce the main task-list Element (plus calendar panel when in DatePicker
 // mode). Pure: reads Core + ViewState, no side-effects. `now_epoch` is used
 // to highlight today in the calendar and will be used for urgency coloring in M9.
+// The tree list is drawn starting at visible[state.tree_scroll].
 [[nodiscard]] ftxui::Element render(
     const core::NodePool &pool,
     const ViewState &state,

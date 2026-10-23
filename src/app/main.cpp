@@ -1,9 +1,11 @@
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/color.hpp>
+#include <ftxui/screen/terminal.hpp>
 #include <string>
 #include <variant>
 
@@ -14,6 +16,7 @@
 #include "ui/key_handler.hpp"
 #include "ui/renderer.hpp"
 #include "ui/view_state.hpp"
+#include "ui/scroll.hpp"
 
 int main()
 {
@@ -51,6 +54,10 @@ int main()
         )
                                    .count();
         const auto visible = toe::ui::compute_visible(pool, state.folded);
+        // Terminal::Size() rather than screen.dimy(): the screen resizes after Render().
+        const int reserved = status_message.empty() ? 1 : 2;  // mode bar (+ message line)
+        const int body_rows = std::max(0, ftxui::Terminal::Size().dimy - reserved);
+        toe::ui::update_tree_scroll(state, visible, static_cast<std::size_t>(body_rows));
         auto body = toe::ui::render(pool, state, visible, now_epoch);
         auto status = toe::ui::render_status_bar(state);
         if (status_message.empty())
