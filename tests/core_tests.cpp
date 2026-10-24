@@ -1,8 +1,11 @@
 #include <gtest/gtest.h>
 
+#include <cstdint>
+#include <optional>
 #include <vector>
 
 #include "core/error.hpp"
+#include "core/fields.hpp"
 #include "core/node_pool.hpp"
 #include "core/task_id.hpp"
 
@@ -512,6 +515,102 @@ TEST(Tree, DeepNestingTraversesAndDeletesWithoutStackOverflow)
     ASSERT_TRUE(pool.remove_subtree(root).has_value());
     EXPECT_EQ(pool.live_count(), 0u);
     EXPECT_FALSE(pool.root().is_valid());
+}
+
+TEST(CopySubtree, CopiesFieldsAndPreservesChildOrder)
+{
+    NodePool src;
+    const TaskId root = src.add_root();
+    const TaskId a = src.add_child(root).value();
+    const TaskId b = src.add_child(root).value();
+    const TaskId a1 = src.add_child(a).value();
+    ASSERT_TRUE(src.set_description(root, "root").has_value());
+    ASSERT_TRUE(src.set_description(a, "a").has_value());
+    ASSERT_TRUE(src.set_description(b, "b").has_value());
+    ASSERT_TRUE(src.set_description(a1, "a1").has_value());
+    ASSERT_TRUE(src.set_status(b, Status::DONE).has_value());
+    ASSERT_TRUE(src.set_priority(a, Priority::HIGH).has_value());
+    ASSERT_TRUE(src.set_due_date(a1, 86400).has_value());
+
+    NodePool dst;
+    const auto copy = copy_subtree(src, root, dst);
+    ASSERT_TRUE(copy.has_value());
+
+    const auto order = dst.flatten();
+    ASSERT_EQ(order.size(), 4u);
+    EXPECT_EQ(order[0], *copy);
+    EXPECT_EQ(dst.get_description(order[0]).value(), "root");
+    EXPECT_EQ(dst.get_description(order[1]).value(), "a");
+    EXPECT_EQ(dst.get_description(order[2]).value(), "a1");
+    EXPECT_EQ(dst.get_description(order[3]).value(), "b");
+    EXPECT_EQ(dst.get_status(order[3]).value(), Status::DONE);
+    EXPECT_EQ(dst.get_priority(order[1]).value(), Priority::HIGH);
+    EXPECT_EQ(dst.get_due_date(order[2]).value(), std::optional<std::int64_t>{86400});
+}
+
+TEST(CopySubtree, CopiesOnlyTheChosenSubtreeAndLeavesSourceUntouched)
+{
+    NodePool src;
+    const TaskId r1 = src.add_root();
+    const TaskId r2 = src.add_root();
+    const TaskId c = src.add_child(r2).value();
+    ASSERT_TRUE(src.set_description(r1, "other").has_value());
+    ASSERT_TRUE(src.set_description(r2, "keep").has_value());
+    ASSERT_TRUE(src.set_description(c, "child").has_value());
+
+    NodePool dst;
+    ASSERT_TRUE(copy_subtree(src, r2, dst).has_value());
+
+    EXPECT_EQ(dst.live_count(), 2u);
+    EXPECT_EQ(src.live_count(), 3u);
+    EXPECT_EQ(src.flatten().size(), 3u);
+}
+
+TEST(CopySubtree, AppendsAfterExistingRootsInDestination)
+{
+    NodePool src;
+    const TaskId s = src.add_root();
+    ASSERT_TRUE(src.set_description(s, "new").has_value());
+
+    NodePool dst;
+    const TaskId existing = dst.add_root();
+    ASSERT_TRUE(dst.set_description(existing, "old").has_value());
+
+    ASSERT_TRUE(copy_subtree(src, s, dst).has_value());
+
+    const auto order = dst.flatten();
+    ASSERT_EQ(order.size(), 2u);
+    EXPECT_EQ(dst.get_description(order[0]).value(), "old");
+    EXPECT_EQ(dst.get_description(order[1]).value(), "new");
+}
+
+TEST(CopySubtree, RejectsStaleHandle)
+{
+    NodePool src;
+    const TaskId r = src.add_root();
+    ASSERT_TRUE(src.remove_subtree(r).has_value());
+
+    NodePool dst;
+    const auto copy = copy_subtree(src, r, dst);
+    ASSERT_FALSE(copy.has_value());
+    EXPECT_EQ(copy.error(), Error::STALE_HANDLE);
+    EXPECT_EQ(dst.live_count(), 0u);
+}
+
+TEST(CopySubtree, HandlesVeryDeepChainWithoutRecursion)
+{
+    NodePool src;
+    TaskId cur = src.add_root();
+    const TaskId root = cur;
+    constexpr std::size_t DEPTH = 100000;
+    for (std::size_t i = 1; i < DEPTH; ++i)
+    {
+        cur = src.add_child(cur).value();
+    }
+
+    NodePool dst;
+    ASSERT_TRUE(copy_subtree(src, root, dst).has_value());
+    EXPECT_EQ(dst.live_count(), DEPTH);
 }
 
 }  // namespace toe::core

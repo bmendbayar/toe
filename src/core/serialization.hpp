@@ -4,6 +4,7 @@
 #include <expected>
 #include <filesystem>
 #include <span>
+#include <string_view>
 #include <vector>
 
 #include "core/error.hpp"
@@ -41,6 +42,12 @@ namespace toe::core
 // Resolve the save-file path per the XDG Base Directory spec:
 // `$XDG_CONFIG_HOME/toe/tasks.bin`, falling back to `~/.config/toe/tasks.bin`.
 [[nodiscard]] std::filesystem::path tasks_path();
+
+// Resolve an `;export` target. A bare name (no '/', not starting with '~') maps
+// to `config_dir/<name>`, with ".bin" appended when it has no extension; a
+// leading "~/" expands to $HOME; anything else is used as given.
+[[nodiscard]] std::filesystem::path
+resolve_export_path(std::string_view target, const std::filesystem::path &config_dir);
 
 // Serialize `pool` and write it to `path`, creating parent directories as
 // needed. Filesystem failures report Error::IoError.

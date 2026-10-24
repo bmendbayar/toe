@@ -1,5 +1,8 @@
 #include <cassert>
 
+#include <utility>
+#include <vector>
+
 #include "core/node_pool.hpp"
 
 namespace toe::core
@@ -515,6 +518,95 @@ TaskId NodePool::prev_sibling(const TaskId id) const
         cur = next_sibling_[cur.index];
     }
     return cur;
+}
+
+namespace
+{
+
+// Copy every task field of `from` (in `src`) onto `to` (in `dst`).
+std::expected<void, Error> copy_fields(const NodePool &src, TaskId from, NodePool &dst, TaskId to)
+{
+    const auto status = src.get_status(from);
+    if (!status)
+    {
+        return std::unexpected(status.error());
+    }
+    const auto priority = src.get_priority(from);
+    if (!priority)
+    {
+        return std::unexpected(priority.error());
+    }
+    const auto due = src.get_due_date(from);
+    if (!due)
+    {
+        return std::unexpected(due.error());
+    }
+    const auto desc = src.get_description(from);
+    if (!desc)
+    {
+        return std::unexpected(desc.error());
+    }
+    if (auto r = dst.set_status(to, *status); !r)
+    {
+        return r;
+    }
+    if (auto r = dst.set_priority(to, *priority); !r)
+    {
+        return r;
+    }
+    if (auto r = dst.set_due_date(to, *due); !r)
+    {
+        return r;
+    }
+    if (desc->empty())
+    {
+        return {};  // set_description rejects empty text; a fresh node is already empty
+    }
+    return dst.set_description(to, *desc);
+}
+
+}  // namespace
+
+std::expected<TaskId, Error> copy_subtree(const NodePool &src, const TaskId root, NodePool &dst)
+{
+    if (!src.is_valid(root))
+    {
+        return std::unexpected(Error::STALE_HANDLE);
+    }
+
+    const TaskId new_root = dst.add_root();
+    if (auto r = copy_fields(src, root, dst, new_root); !r)
+    {
+        return std::unexpected(r.error());
+    }
+
+    // Explicit work list of (source node, its copy in dst) whose children are
+    // still to be copied; nesting depth is user-controlled, so no recursion.
+    std::vector<std::pair<TaskId, TaskId>> pending{{root, new_root}};
+    for (std::size_t i = 0; i < pending.size(); ++i)
+    {
+        const auto [from, to] = pending[i];
+        auto child = src.first_child(from);
+        while (child && child->is_valid())
+        {
+            const auto copy = dst.add_child(to);
+            if (!copy)
+            {
+                return std::unexpected(copy.error());
+            }
+            if (auto r = copy_fields(src, *child, dst, *copy); !r)
+            {
+                return std::unexpected(r.error());
+            }
+            pending.emplace_back(*child, *copy);
+            child = src.next_sibling(*child);
+        }
+        if (!child)
+        {
+            return std::unexpected(child.error());
+        }
+    }
+    return new_root;
 }
 
 }  // namespace toe::core

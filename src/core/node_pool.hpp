@@ -232,4 +232,11 @@ private:
     std::size_t live_count_ = 0;
 };
 
+// Deep-copy `root` and its subtree from `src` into `dst` as a new last root,
+// preserving sibling order and every task field. Returns the new root's id in
+// `dst`, or STALE_HANDLE if `root` is not live in `src`. Iterative; safe at any
+// depth. `src` and `dst` must be different pools.
+[[nodiscard]] std::expected<TaskId, Error>
+copy_subtree(const NodePool &src, TaskId root, NodePool &dst);
+
 }  // namespace toe::core

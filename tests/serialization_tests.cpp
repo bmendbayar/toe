@@ -2,8 +2,10 @@
 
 #include <cstdint>
 #include <cstring>
+#include <cstdlib>
 #include <filesystem>
 #include <span>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -364,4 +366,77 @@ TEST(Serialization, LoadMissingFileReportsIoError)
 }
 
 }  // namespace
+TEST(Serialization, ResolveExportPathBareNameGoesToConfigDir)
+{
+    namespace fs = std::filesystem;
+    const fs::path cfg{"/tmp/cfg/toe"};
+    EXPECT_EQ(resolve_export_path("archive", cfg), fs::path{"/tmp/cfg/toe/archive.bin"});
+    EXPECT_EQ(resolve_export_path("notes.dat", cfg), fs::path{"/tmp/cfg/toe/notes.dat"});
+}
+
+TEST(Serialization, ResolveExportPathKeepsExplicitPaths)
+{
+    namespace fs = std::filesystem;
+    const fs::path cfg{"/tmp/cfg/toe"};
+    EXPECT_EQ(resolve_export_path("/abs/x.bin", cfg), fs::path{"/abs/x.bin"});
+    EXPECT_EQ(resolve_export_path("./x.bin", cfg), fs::path{"./x.bin"});
+    EXPECT_EQ(resolve_export_path("sub/x.bin", cfg), fs::path{"sub/x.bin"});
+}
+
+TEST(Serialization, ResolveExportPathExpandsTilde)
+{
+    namespace fs = std::filesystem;
+    const char *prev = std::getenv("HOME");
+    const std::string saved = prev != nullptr ? prev : "";
+    ::setenv("HOME", "/home/tester", 1);
+
+    EXPECT_EQ(resolve_export_path("~/old.bin", "/cfg"), fs::path{"/home/tester/old.bin"});
+    EXPECT_EQ(resolve_export_path("~", "/cfg"), fs::path{"/home/tester"});
+
+    if (prev != nullptr)
+    {
+        ::setenv("HOME", saved.c_str(), 1);
+    }
+    else
+    {
+        ::unsetenv("HOME");
+    }
+}
+
+TEST(Serialization, ExportedSubtreeSurvivesSaveLoadAndAppends)
+{
+    namespace fs = std::filesystem;
+    const fs::path path = fs::temp_directory_path() / "toe-export-test.bin";
+    fs::remove(path);
+
+    NodePool src;
+    const TaskId r = src.add_root();
+    const TaskId c = src.add_child(r).value();
+    ASSERT_TRUE(src.set_description(r, "proj").has_value());
+    ASSERT_TRUE(src.set_description(c, "step").has_value());
+
+    // First export creates the file; second appends a second root.
+    for (int i = 0; i < 2; ++i)
+    {
+        NodePool dest;
+        if (auto loaded = load(path); loaded)
+        {
+            dest = std::move(*loaded);
+        }
+        ASSERT_TRUE(copy_subtree(src, r, dest).has_value());
+        ASSERT_TRUE(save(dest, path).has_value());
+    }
+
+    const auto result = load(path);
+    ASSERT_TRUE(result.has_value());
+    const auto order = result->flatten();
+    ASSERT_EQ(order.size(), 4u);
+    EXPECT_EQ(result->get_description(order[0]).value(), "proj");
+    EXPECT_EQ(result->get_description(order[1]).value(), "step");
+    EXPECT_EQ(result->get_description(order[2]).value(), "proj");
+    EXPECT_EQ(result->get_description(order[3]).value(), "step");
+
+    fs::remove(path);
+}
+
 }  // namespace toe::core

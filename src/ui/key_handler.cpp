@@ -349,6 +349,14 @@ EventResult handle_command(ViewState &state, const ftxui::Event &event, std::int
         {
             command = Command{CmdForceQuit{}};
         }
+        else if (cmd == "export" || cmd.starts_with("export "))
+        {
+            const auto first = cmd.find_first_not_of(' ', 6);
+            const auto last = cmd.find_last_not_of(' ');
+            command = Command{CmdExport{
+                first == std::string::npos ? std::string{} : cmd.substr(first, last - first + 1)
+            }};
+        }
         else if (cmd == "timeline")
         {
             state.view_mode = ViewMode::TIMELINE;
@@ -703,7 +711,7 @@ std::expected<void, core::Error> apply_command(
                 return pool.set_due_date(state.cursor, *epoch);
             }
 
-            // CmdQuit, CmdForceQuit, CmdSave, CmdSaveAndQuit: no Core mutation; app handles them.
+            // CmdQuit, CmdForceQuit, CmdSave, CmdSaveAndQuit, CmdExport: no Core mutation; app handles them.
             return {};
         },
         cmd

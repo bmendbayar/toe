@@ -523,6 +523,51 @@ TEST(CommandMode, Return_Q_EmitsCmdQuit)
     EXPECT_TRUE(std::holds_alternative<CmdQuit>(*result.command));
 }
 
+TEST(CommandMode, Return_Export_EmitsCmdExportWithTarget)
+{
+    NodePool pool;
+    ViewState state;
+    state.mode = Mode::COMMAND;
+    state.cmd_buffer = "export  archive ";
+    const auto vis = compute_visible(pool, state.folded);
+
+    const auto result = process_event(state, vis, ftxui::Event::Return);
+
+    ASSERT_TRUE(result.command.has_value());
+    const auto *exp = std::get_if<CmdExport>(&*result.command);
+    ASSERT_NE(exp, nullptr);
+    EXPECT_EQ(exp->target, "archive");
+}
+
+TEST(CommandMode, Return_BareExport_EmitsCmdExportWithEmptyTarget)
+{
+    NodePool pool;
+    ViewState state;
+    state.mode = Mode::COMMAND;
+    state.cmd_buffer = "export";
+    const auto vis = compute_visible(pool, state.folded);
+
+    const auto result = process_event(state, vis, ftxui::Event::Return);
+
+    ASSERT_TRUE(result.command.has_value());
+    const auto *exp = std::get_if<CmdExport>(&*result.command);
+    ASSERT_NE(exp, nullptr);
+    EXPECT_TRUE(exp->target.empty());
+}
+
+TEST(CommandMode, Return_ExportPrefixedWord_EmitsNothing)
+{
+    NodePool pool;
+    ViewState state;
+    state.mode = Mode::COMMAND;
+    state.cmd_buffer = "exporter";
+    const auto vis = compute_visible(pool, state.folded);
+
+    const auto result = process_event(state, vis, ftxui::Event::Return);
+
+    EXPECT_FALSE(result.command.has_value());
+}
+
 TEST(CommandMode, Return_WQ_EmitsCmdSaveAndQuit)
 {
     NodePool pool;

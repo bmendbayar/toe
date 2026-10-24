@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <string>
 #include <type_traits>
 
 #include "core/fields.hpp"
@@ -358,6 +359,28 @@ std::filesystem::path tasks_path()
     const char *home = std::getenv("HOME");
     const fs::path base = (home != nullptr && *home != '\0') ? fs::path{home} : fs::path{"."};
     return base / ".config" / "toe" / "tasks.bin";
+}
+
+std::filesystem::path
+resolve_export_path(const std::string_view target, const std::filesystem::path &config_dir)
+{
+    namespace fs = std::filesystem;
+    if (target == "~" || target.starts_with("~/"))
+    {
+        const char *home = std::getenv("HOME");
+        const fs::path base = (home != nullptr && *home != '\0') ? fs::path{home} : fs::path{"."};
+        return target.size() <= 2 ? base : base / fs::path{std::string{target.substr(2)}};
+    }
+    fs::path p{std::string{target}};
+    if (target.find('/') == std::string_view::npos)
+    {
+        if (!p.has_extension())
+        {
+            p += ".bin";
+        }
+        return config_dir / p;
+    }
+    return p;
 }
 
 std::expected<void, Error> save(const NodePool &pool, const std::filesystem::path &path)

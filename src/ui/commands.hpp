@@ -22,6 +22,7 @@ struct CmdQuit {};
 struct CmdForceQuit {};   // ':q!' — discard unsaved changes and quit
 struct CmdSave {};
 struct CmdSaveAndQuit {};
+struct CmdExport { std::string target; };   // ';export <target>' — copy cursor subtree to another file
 // clang-format on
 
 using Command = std::variant<
@@ -39,6 +40,7 @@ using Command = std::variant<
     CmdQuit,
     CmdForceQuit,
     CmdSave,
-    CmdSaveAndQuit>;
+    CmdSaveAndQuit,
+    CmdExport>;
 
 }  // namespace toe::ui
