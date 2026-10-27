@@ -28,6 +28,7 @@ FetchContent_MakeAvailable(ftxui)
 set(TOE_WARNINGS -Wall -Wextra -Werror)
 
 add_library(toe_core STATIC
+    src/core/file_scan.cpp
     src/core/node_pool.cpp
     src/core/serialization.cpp
 )
@@ -50,6 +51,7 @@ target_link_libraries(toe_ui PUBLIC
 )
 
 add_executable(toe
+    src/app/file_picker.cpp
     src/app/main.cpp
 )
 target_compile_options(toe PRIVATE ${TOE_WARNINGS})
@@ -61,6 +63,7 @@ include(GoogleTest)
 add_executable(toe_tests
     tests/core_tests.cpp
     tests/fields_tests.cpp
+    tests/file_scan_tests.cpp
     tests/serialization_tests.cpp
 )
 target_compile_options(toe_tests PRIVATE ${TOE_WARNINGS})
