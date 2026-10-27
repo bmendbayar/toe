@@ -4,6 +4,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <span>
 #include <string>
 #include <string_view>
@@ -441,32 +442,46 @@ TEST(Serialization, LoadMissingFileReportsIoError)
 }
 
 }  // namespace
-TEST(Serialization, ResolveExportPathBareNameGoesToConfigDir)
+TEST(Serialization, ResolveToePathBareNameGoesToConfigDir)
 {
     namespace fs = std::filesystem;
     const fs::path cfg{"/tmp/cfg/toe"};
-    EXPECT_EQ(resolve_export_path("archive", cfg), fs::path{"/tmp/cfg/toe/archive.bin"});
-    EXPECT_EQ(resolve_export_path("notes.dat", cfg), fs::path{"/tmp/cfg/toe/notes.dat"});
+    EXPECT_EQ(resolve_toe_path("archive", cfg), fs::path{"/tmp/cfg/toe/archive.toe"});
+    EXPECT_EQ(resolve_toe_path("notes.dat", cfg), fs::path{"/tmp/cfg/toe/notes.dat"});
 }
 
-TEST(Serialization, ResolveExportPathKeepsExplicitPaths)
+TEST(Serialization, ResolveToePathPrefersExistingLegacyBin)
+{
+    namespace fs = std::filesystem;
+    const fs::path cfg = fs::temp_directory_path() / "toe-resolve-legacy";
+    fs::remove_all(cfg);
+    fs::create_directories(cfg);
+    std::ofstream{cfg / "dsa.bin"} << "x";
+
+    EXPECT_EQ(resolve_toe_path("dsa", cfg), cfg / "dsa.bin");
+    EXPECT_EQ(resolve_toe_path("fresh", cfg), cfg / "fresh.toe");
+
+    fs::remove_all(cfg);
+}
+
+TEST(Serialization, ResolveToePathKeepsExplicitPaths)
 {
     namespace fs = std::filesystem;
     const fs::path cfg{"/tmp/cfg/toe"};
-    EXPECT_EQ(resolve_export_path("/abs/x.bin", cfg), fs::path{"/abs/x.bin"});
-    EXPECT_EQ(resolve_export_path("./x.bin", cfg), fs::path{"./x.bin"});
-    EXPECT_EQ(resolve_export_path("sub/x.bin", cfg), fs::path{"sub/x.bin"});
+    EXPECT_EQ(resolve_toe_path("/abs/x.bin", cfg), fs::path{"/abs/x.bin"});
+    EXPECT_EQ(resolve_toe_path("./x.bin", cfg), fs::path{"./x.bin"});
+    EXPECT_EQ(resolve_toe_path("sub/x.bin", cfg), fs::path{"sub/x.bin"});
 }
 
-TEST(Serialization, ResolveExportPathExpandsTilde)
+TEST(Serialization, ResolveToePathExpandsTilde)
 {
     namespace fs = std::filesystem;
     const char *prev = std::getenv("HOME");
     const std::string saved = prev != nullptr ? prev : "";
     ::setenv("HOME", "/home/tester", 1);
 
-    EXPECT_EQ(resolve_export_path("~/old.bin", "/cfg"), fs::path{"/home/tester/old.bin"});
-    EXPECT_EQ(resolve_export_path("~", "/cfg"), fs::path{"/home/tester"});
+    EXPECT_EQ(resolve_toe_path("~/old.bin", "/cfg"), fs::path{"/home/tester/old.bin"});
+    EXPECT_EQ(resolve_toe_path("~", "/cfg"), fs::path{"/home/tester"});
 
     if (prev != nullptr)
     {

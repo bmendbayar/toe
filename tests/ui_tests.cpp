@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
+#include <filesystem>
 #include <ftxui/component/event.hpp>
 #include <ftxui/dom/node.hpp>
 #include <ftxui/screen/screen.hpp>
@@ -13,6 +14,7 @@
 #include "ui/date_util.hpp"
 #include "ui/editor_text.hpp"
 #include "ui/key_handler.hpp"
+#include "ui/picker.hpp"
 #include "ui/renderer.hpp"
 #include "ui/scroll.hpp"
 #include "ui/view_state.hpp"
@@ -600,6 +602,128 @@ TEST(CommandMode, Return_ExportPrefixedWord_EmitsNothing)
     const auto result = process_event(state, vis, ftxui::Event::Return);
 
     EXPECT_FALSE(result.command.has_value());
+}
+
+namespace
+{
+
+std::optional<CmdOpen> open_from_command_line(const std::string &line)
+{
+    NodePool pool;
+    ViewState state;
+    state.mode = Mode::COMMAND;
+    state.cmd_buffer = line;
+    const auto vis = compute_visible(pool, state.folded);
+    const auto result = process_event(state, vis, ftxui::Event::Return);
+    if (!result.command)
+    {
+        return std::nullopt;
+    }
+    const auto *open = std::get_if<CmdOpen>(&*result.command);
+    return open != nullptr ? std::optional<CmdOpen>{*open} : std::nullopt;
+}
+
+}  // namespace
+
+TEST(CommandMode, Return_BareOpen_EmitsCmdOpenWithEmptyTarget)
+{
+    const auto open = open_from_command_line("open");
+    ASSERT_TRUE(open.has_value());
+    EXPECT_TRUE(open->target.empty());
+    EXPECT_FALSE(open->force);
+}
+
+TEST(CommandMode, Return_OpenBang_EmitsForcedCmdOpen)
+{
+    const auto open = open_from_command_line("open!");
+    ASSERT_TRUE(open.has_value());
+    EXPECT_TRUE(open->target.empty());
+    EXPECT_TRUE(open->force);
+}
+
+TEST(CommandMode, Return_OpenWithTarget_TrimsTarget)
+{
+    const auto open = open_from_command_line("open  dsa ");
+    ASSERT_TRUE(open.has_value());
+    EXPECT_EQ(open->target, "dsa");
+    EXPECT_FALSE(open->force);
+}
+
+TEST(CommandMode, Return_OpenBangWithTarget_EmitsForcedCmdOpen)
+{
+    const auto open = open_from_command_line("open! ~/notes.toe");
+    ASSERT_TRUE(open.has_value());
+    EXPECT_EQ(open->target, "~/notes.toe");
+    EXPECT_TRUE(open->force);
+}
+
+TEST(CommandMode, Return_OpenPrefixedWord_EmitsNothing)
+{
+    EXPECT_FALSE(open_from_command_line("opener").has_value());
+}
+
+// --- file picker helpers ------------------------------------------------------
+
+TEST(Picker, DisplayName_BeneathCwd_IsRelative)
+{
+    EXPECT_EQ(display_name("/work/proj/a/x.toe", "/work/proj", "/home/u"), "a/x.toe");
+}
+
+TEST(Picker, DisplayName_BeneathHome_UsesTilde)
+{
+    EXPECT_EQ(display_name("/home/u/.config/toe/t.bin", "/work/proj", "/home/u"), "~/.config/toe/t.bin");
+}
+
+TEST(Picker, DisplayName_Elsewhere_IsAbsolute)
+{
+    EXPECT_EQ(display_name("/srv/x.toe", "/work/proj", "/home/u"), "/srv/x.toe");
+}
+
+TEST(Picker, DisplayName_CwdWinsOverHome)
+{
+    EXPECT_EQ(display_name("/home/u/proj/x.toe", "/home/u/proj", "/home/u"), "x.toe");
+}
+
+TEST(Picker, Parse_ExitZero_ReturnsSelectedPath)
+{
+    const std::map<std::string, std::filesystem::path> known{{"a.toe", "/w/a.toe"}, {"b.toe", "/w/b.toe"}};
+    const auto r = parse_picker_output("b\nb.toe\n", 0, known, "/cfg");
+    const auto *pick = std::get_if<PickPath>(&r);
+    ASSERT_NE(pick, nullptr);
+    EXPECT_EQ(pick->path, std::filesystem::path{"/w/b.toe"});
+}
+
+TEST(Picker, Parse_ExitZeroUnknownSelection_Cancels)
+{
+    const std::map<std::string, std::filesystem::path> known{{"a.toe", "/w/a.toe"}};
+    EXPECT_TRUE(std::holds_alternative<PickCancelled>(parse_picker_output("x\nzzz\n", 0, known, "/cfg")));
+}
+
+TEST(Picker, Parse_NoMatchWithQuery_CreatesNewFileInConfigDir)
+{
+    const auto r = parse_picker_output("scratch\n", 1, {}, "/cfg/toe");
+    const auto *pick = std::get_if<PickPath>(&r);
+    ASSERT_NE(pick, nullptr);
+    EXPECT_EQ(pick->path, std::filesystem::path{"/cfg/toe/scratch.toe"});
+}
+
+TEST(Picker, Parse_NoMatchWithPathQuery_UsesPathAsGiven)
+{
+    const auto r = parse_picker_output("sub/new.toe\n", 1, {}, "/cfg/toe");
+    const auto *pick = std::get_if<PickPath>(&r);
+    ASSERT_NE(pick, nullptr);
+    EXPECT_EQ(pick->path, std::filesystem::path{"sub/new.toe"});
+}
+
+TEST(Picker, Parse_NoMatchEmptyQuery_Cancels)
+{
+    EXPECT_TRUE(std::holds_alternative<PickCancelled>(parse_picker_output("\n", 1, {}, "/cfg")));
+}
+
+TEST(Picker, Parse_Interrupted_Cancels)
+{
+    const std::map<std::string, std::filesystem::path> known{{"a.toe", "/w/a.toe"}};
+    EXPECT_TRUE(std::holds_alternative<PickCancelled>(parse_picker_output("a\na.toe\n", 130, known, "/cfg")));
 }
 
 TEST(CommandMode, Return_WQ_EmitsCmdSaveAndQuit)

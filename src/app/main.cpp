@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <expected>
 #include <filesystem>
 #include <fstream>
 #include <ftxui/component/component.hpp>
@@ -18,6 +19,7 @@
 #include <string_view>
 #include <variant>
 
+#include "app/file_picker.hpp"
 #include "core/error.hpp"
 #include "core/node_pool.hpp"
 #include "core/serialization.hpp"
@@ -35,9 +37,13 @@ void print_usage(std::FILE *out)
 {
     std::fputs(
         "usage: toe [-f|--file <path>]\n"
-        "  -f, --file <path>  load/save tasks from <path> instead of the default\n"
-        "                     ($XDG_CONFIG_HOME/toe/tasks.bin or ~/.config/toe/tasks.bin)\n"
-        "  -h, --help         show this help\n",
+        "  -f, --file <path>  load/save tasks from <path> and skip the file picker\n"
+        "  -h, --help         show this help\n"
+        "\n"
+        "Without -f, toe opens a picker (sk, else fzf) over the *.toe files under the\n"
+        "current directory and the *.toe / *.bin files in the config dir\n"
+        "($XDG_CONFIG_HOME/toe or ~/.config/toe). Type a new name to create a file.\n"
+        "If neither picker is installed, ~/.config/toe/tasks.bin is used.\n",
         out
     );
 }
@@ -107,7 +113,7 @@ std::string export_subtree(
         return "nothing to export";
     }
 
-    const fs::path dest = toe::core::resolve_export_path(target, toe::core::tasks_path().parent_path());
+    const fs::path dest = toe::core::resolve_toe_path(target, toe::core::tasks_path().parent_path());
     std::error_code ec;
     // equivalent() fails when either file is missing; fall back to a lexical compare.
     if (fs::equivalent(dest, current_file, ec) || dest.lexically_normal() == current_file.lexically_normal())
@@ -135,25 +141,6 @@ std::string export_subtree(
         return "export failed — check disk space or permissions";
     }
     return "exported subtree to " + dest.string();
-}
-
-// POSIX single-quote escaping so the temp path survives `sh -c`.
-std::string shell_quote(const std::string &s)
-{
-    std::string out = "'";
-    for (const char c : s)
-    {
-        if (c == '\'')
-        {
-            out += "'\\''";
-        }
-        else
-        {
-            out += c;
-        }
-    }
-    out += '\'';
-    return out;
 }
 
 // Edit the cursor task's description in $VISUAL / $EDITOR (fallback vi) via a
@@ -202,7 +189,7 @@ std::string edit_description(
     const std::string editor = (visual != nullptr && *visual != '\0')           ? visual
                                : (editor_env != nullptr && *editor_env != '\0') ? editor_env
                                                                                 : "vim";
-    const std::string command = editor + " " + shell_quote(tmp.string());
+    const std::string command = editor + " " + toe::app::shell_quote(tmp.string());
 
     int rc = -1;
     screen.WithRestoredIO([&] { rc = std::system(command.c_str()); })();
@@ -236,6 +223,79 @@ std::string edit_description(
     return "";
 }
 
+// Switch to another toe file (`;open[!] [target]`). An empty target runs the
+// picker with the TUI suspended. Returns the status-line message.
+std::string open_file(
+    ftxui::ScreenInteractive &screen,
+    toe::core::NodePool &pool,
+    toe::ui::ViewState &state,
+    bool &dirty,
+    std::filesystem::path &path,
+    const toe::ui::CmdOpen &cmd
+)
+{
+    namespace fs = std::filesystem;
+    if (dirty && !cmd.force)
+    {
+        return "unsaved changes — ;w to save, ;open! to discard";
+    }
+
+    const fs::path config_dir = toe::core::tasks_path().parent_path();
+    fs::path target;
+    if (cmd.target.empty())
+    {
+        std::error_code ec;
+        const fs::path cwd = fs::current_path(ec);
+        std::expected<toe::ui::PickResult, std::string> picked =
+            std::unexpected(std::string{"picker didn't run"});
+        screen.WithRestoredIO([&] { picked = toe::app::run_picker(config_dir, cwd); })();
+        if (!picked)
+        {
+            return picked.error();
+        }
+        const auto *choice = std::get_if<toe::ui::PickPath>(&*picked);
+        if (choice == nullptr)
+        {
+            return "";
+        }
+        target = choice->path;
+    }
+    else
+    {
+        target = toe::core::resolve_toe_path(cmd.target, config_dir);
+    }
+
+    toe::core::NodePool next;
+    bool created = false;
+    if (auto r = toe::core::load(target); r)
+    {
+        next = std::move(*r);
+    }
+    else if (r.error() == toe::core::Error::IO_ERROR)
+    {
+        std::error_code ec;
+        if (fs::exists(target, ec))
+        {
+            return "couldn't read " + target.string();
+        }
+        created = true;  // missing file: start empty, created on ;w
+    }
+    else
+    {
+        return "open failed: " + target.string() + " is not a valid toe file";
+    }
+
+    pool = std::move(next);
+    path = std::move(target);
+    state = toe::ui::ViewState{};
+    if (const auto root = pool.root(); root.is_valid())
+    {
+        state.cursor = root;
+    }
+    dirty = false;
+    return (created ? "new file " : "opened ") + path.string();
+}
+
 }  // namespace
 
 int main(int argc, char **argv)
@@ -252,7 +312,33 @@ int main(int argc, char **argv)
         return 0;
     }
 
-    const auto path = args.file ? *args.file : toe::core::tasks_path();
+    std::filesystem::path path;
+    if (args.file)
+    {
+        path = *args.file;
+    }
+    else
+    {
+        path = toe::core::tasks_path();
+        if (::isatty(STDIN_FILENO) != 0 && ::isatty(STDOUT_FILENO) != 0)
+        {
+            std::error_code ec;
+            const auto cwd = std::filesystem::current_path(ec);
+            const auto picked = toe::app::run_picker(path.parent_path(), cwd);
+            if (!picked)
+            {
+                std::fprintf(stderr, "toe: %s — opening %s\n", picked.error().c_str(), path.c_str());
+            }
+            else if (const auto *choice = std::get_if<toe::ui::PickPath>(&*picked))
+            {
+                path = choice->path;
+            }
+            else
+            {
+                return 0;  // picker cancelled
+            }
+        }
+    }
     toe::core::NodePool pool;
 
     if (auto r = toe::core::load(path); r)
@@ -370,6 +456,10 @@ int main(int argc, char **argv)
         else if (std::holds_alternative<toe::ui::CmdEditDescription>(cmd))
         {
             status_message = edit_description(screen, pool, state.cursor, dirty);
+        }
+        else if (const auto *open = std::get_if<toe::ui::CmdOpen>(&cmd))
+        {
+            status_message = open_file(screen, pool, state, dirty, path, *open);
         }
         else
         {

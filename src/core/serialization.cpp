@@ -21,9 +21,8 @@ static_assert(std::endian::native == std::endian::little, "serialization assumes
 namespace
 {
 
-// Format constants. The magic doubles as a version tag's neighbour: bump
-// kVersion (and add a migration path) whenever the layout below changes.
-constexpr char MAGIC[4] = {'T', 'O', 'E', '1'};
+// Format constants (MAGIC lives in serialization.hpp). Bump VERSION (and add a
+// migration path) whenever the layout below changes.
 constexpr std::uint32_t VERSION = 2;
 
 // v1 files predate descriptions: same layout minus the description array.
@@ -383,7 +382,7 @@ std::filesystem::path tasks_path()
 }
 
 std::filesystem::path
-resolve_export_path(const std::string_view target, const std::filesystem::path &config_dir)
+resolve_toe_path(const std::string_view target, const std::filesystem::path &config_dir)
 {
     namespace fs = std::filesystem;
     if (target == "~" || target.starts_with("~/"))
@@ -397,7 +396,11 @@ resolve_export_path(const std::string_view target, const std::filesystem::path &
     {
         if (!p.has_extension())
         {
-            p += ".bin";
+            // Prefer an existing legacy "<name>.bin" so older files keep resolving.
+            std::error_code ec;
+            fs::path legacy = config_dir / p;
+            legacy += ".bin";
+            p += fs::is_regular_file(legacy, ec) ? ".bin" : ".toe";
         }
         return config_dir / p;
     }

@@ -416,6 +416,16 @@ EventResult handle_command(ViewState &state, const ftxui::Event &event, std::int
                 first == std::string::npos ? std::string{} : cmd.substr(first, last - first + 1)
             }};
         }
+        else if (cmd == "open" || cmd == "open!" || cmd.starts_with("open ") || cmd.starts_with("open! "))
+        {
+            const bool force = cmd.starts_with("open!");
+            const auto first = cmd.find_first_not_of(' ', force ? 5 : 4);
+            const auto last = cmd.find_last_not_of(' ');
+            command = Command{CmdOpen{
+                first == std::string::npos ? std::string{} : cmd.substr(first, last - first + 1),
+                force
+            }};
+        }
         else if (cmd == "timeline")
         {
             state.view_mode = ViewMode::TIMELINE;
@@ -791,7 +801,7 @@ std::expected<void, core::Error> apply_command(
                 return pool.set_due_date(state.cursor, *epoch);
             }
 
-            // CmdQuit, CmdForceQuit, CmdSave, CmdSaveAndQuit, CmdExport, CmdEditDescription: no Core
+            // CmdQuit, CmdForceQuit, CmdSave, CmdSaveAndQuit, CmdExport, CmdEditDescription, CmdOpen: no Core
             // mutation here; app handles them.
             return {};
         },

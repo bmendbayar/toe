@@ -28,6 +28,9 @@ namespace toe::core
 // per-field byte swapping. Everything below reports failure through
 // std::expected<T, Error> — no exceptions, no partial reads trusted.
 
+// Leading bytes of every toe file, whatever its extension.
+inline constexpr char MAGIC[4] = {'T', 'O', 'E', '1'};
+
 // Encode `pool` to a fresh byte buffer. Pure and infallible (allocation aside).
 [[nodiscard]] std::vector<std::byte> serialize(const NodePool &pool);
 
@@ -43,11 +46,12 @@ namespace toe::core
 // `$XDG_CONFIG_HOME/toe/tasks.bin`, falling back to `~/.config/toe/tasks.bin`.
 [[nodiscard]] std::filesystem::path tasks_path();
 
-// Resolve an `;export` target. A bare name (no '/', not starting with '~') maps
-// to `config_dir/<name>`, with ".bin" appended when it has no extension; a
+// Resolve an `;export` / `;open` / picker target. A bare name (no '/', not
+// starting with '~') maps to `config_dir/<name>`; with no extension, ".toe" is
+// appended unless `config_dir/<name>.bin` already exists (legacy files). A
 // leading "~/" expands to $HOME; anything else is used as given.
 [[nodiscard]] std::filesystem::path
-resolve_export_path(std::string_view target, const std::filesystem::path &config_dir);
+resolve_toe_path(std::string_view target, const std::filesystem::path &config_dir);
 
 // Serialize `pool` and write it to `path`, creating parent directories as
 // needed. Filesystem failures report Error::IoError.
