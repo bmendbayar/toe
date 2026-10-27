@@ -37,7 +37,7 @@ void print_usage(std::FILE *out)
 {
     std::fputs(
         "usage: toe [-f|--file <path>]\n"
-        "  -f, --file <path>  load/save tasks from <path> and skip the file picker\n"
+        "  -f, --file <path>  load/save tasks from <path> (.toe appended if missing) and skip the file picker\n"
         "  -h, --help         show this help\n"
         "\n"
         "Without -f, toe opens a picker (sk, else fzf) over the *.toe files under the\n"
@@ -54,6 +54,16 @@ struct Args
     bool help = false;
     bool ok = true;
 };
+
+// `-f foo` and `-f foo.toe` both name "foo.toe"; the scanner only recognises .toe files.
+std::filesystem::path with_toe_extension(std::string name)
+{
+    if (!name.empty() && !name.ends_with(".toe"))
+    {
+        name += ".toe";
+    }
+    return std::filesystem::path{std::move(name)};
+}
 
 Args parse_args(int argc, char **argv)
 {
@@ -73,11 +83,11 @@ Args parse_args(int argc, char **argv)
                 args.ok = false;
                 return args;
             }
-            args.file = std::filesystem::path{argv[++i]};
+            args.file = with_toe_extension(argv[++i]);
         }
         else if (arg.starts_with("--file="))
         {
-            args.file = std::filesystem::path{std::string{arg.substr(7)}};
+            args.file = with_toe_extension(std::string{arg.substr(7)});
         }
         else
         {
