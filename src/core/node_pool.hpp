@@ -139,16 +139,16 @@ public:
     [[nodiscard]] std::expected<void, Error>
     set_due_date(TaskId id, std::optional<std::int64_t> date);
 
-    // Returns an empty string_view when no description has been set.
+    // Returns an empty string_view when no title has been set.
     // The view is valid as long as the arena is not modified (i.e. no
-    // subsequent set_description calls on any node in this pool).
+    // subsequent set_title calls on any node in this pool).
     [[nodiscard]] std::expected<std::string_view, Error>
-    get_description(TaskId id) const;
-    // Appends `desc` to the arena and updates the node's DescSlice. Old arena
+    get_title(TaskId id) const;
+    // Appends `title` to the arena and updates the node's TextSlice. Old arena
     // bytes for this node are orphaned and compacted at serialization time.
-    // Rejects: StaleHandle, EmptyDescription, DescriptionTooLong.
+    // Rejects: StaleHandle, EmptyTitle, TitleTooLong.
     [[nodiscard]] std::expected<void, Error>
-    set_description(TaskId id, std::string_view desc);
+    set_title(TaskId id, std::string_view title);
 
     // --- Tree inspection ----------------------------------------------------
 
@@ -218,12 +218,12 @@ private:
     std::vector<Status> status_;          // default: Status::Todo
     std::vector<Priority> priority_;      // default: Priority::Low
     std::vector<std::int64_t> due_date_;  // default: kNoDueDate (no date set)
-    std::vector<DescSlice> desc_;         // default: {0, 0} (no description)
+    std::vector<TextSlice> title_;         // default: {0, 0} (no title)
 
-    // Append-only character buffer backing all description strings. Edits
+    // Append-only character buffer backing all title strings. Edits
     // orphan old bytes and append new ones; compaction happens at save time.
-    // ALLOC: one growable buffer for all descriptions, amortised push_back.
-    std::vector<char> desc_arena_;
+    // ALLOC: one growable buffer for all titles, amortised push_back.
+    std::vector<char> text_arena_;
 
     // Head of the root sibling chain; invalid when the forest is empty.
     TaskId root_;

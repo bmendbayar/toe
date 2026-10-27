@@ -23,14 +23,14 @@ struct DatedTask
     std::int64_t due_epoch;
     core::Priority priority;
     Urgency urgency;
-    std::string_view description;  // points into the pool's string arena
+    std::string_view title;  // points into the pool's string arena
 };
 
 // A single row in the timeline grid.
 struct TimelineRow
 {
     core::TaskId id;
-    std::string_view description;
+    std::string_view title;
     core::Priority priority;
     Urgency urgency;
     int col;  // [0, span_days), kColBeforeWindow, or kColAfterWindow
@@ -101,7 +101,7 @@ layout_timeline(
 
         rows.push_back(TimelineRow{
             .id = t.id,
-            .description = t.description,
+            .title = t.title,
             .priority = t.priority,
             .urgency = t.urgency,
             .col = col,

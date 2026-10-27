@@ -524,10 +524,10 @@ TEST(CopySubtree, CopiesFieldsAndPreservesChildOrder)
     const TaskId a = src.add_child(root).value();
     const TaskId b = src.add_child(root).value();
     const TaskId a1 = src.add_child(a).value();
-    ASSERT_TRUE(src.set_description(root, "root").has_value());
-    ASSERT_TRUE(src.set_description(a, "a").has_value());
-    ASSERT_TRUE(src.set_description(b, "b").has_value());
-    ASSERT_TRUE(src.set_description(a1, "a1").has_value());
+    ASSERT_TRUE(src.set_title(root, "root").has_value());
+    ASSERT_TRUE(src.set_title(a, "a").has_value());
+    ASSERT_TRUE(src.set_title(b, "b").has_value());
+    ASSERT_TRUE(src.set_title(a1, "a1").has_value());
     ASSERT_TRUE(src.set_status(b, Status::DONE).has_value());
     ASSERT_TRUE(src.set_priority(a, Priority::HIGH).has_value());
     ASSERT_TRUE(src.set_due_date(a1, 86400).has_value());
@@ -539,10 +539,10 @@ TEST(CopySubtree, CopiesFieldsAndPreservesChildOrder)
     const auto order = dst.flatten();
     ASSERT_EQ(order.size(), 4u);
     EXPECT_EQ(order[0], *copy);
-    EXPECT_EQ(dst.get_description(order[0]).value(), "root");
-    EXPECT_EQ(dst.get_description(order[1]).value(), "a");
-    EXPECT_EQ(dst.get_description(order[2]).value(), "a1");
-    EXPECT_EQ(dst.get_description(order[3]).value(), "b");
+    EXPECT_EQ(dst.get_title(order[0]).value(), "root");
+    EXPECT_EQ(dst.get_title(order[1]).value(), "a");
+    EXPECT_EQ(dst.get_title(order[2]).value(), "a1");
+    EXPECT_EQ(dst.get_title(order[3]).value(), "b");
     EXPECT_EQ(dst.get_status(order[3]).value(), Status::DONE);
     EXPECT_EQ(dst.get_priority(order[1]).value(), Priority::HIGH);
     EXPECT_EQ(dst.get_due_date(order[2]).value(), std::optional<std::int64_t>{86400});
@@ -554,9 +554,9 @@ TEST(CopySubtree, CopiesOnlyTheChosenSubtreeAndLeavesSourceUntouched)
     const TaskId r1 = src.add_root();
     const TaskId r2 = src.add_root();
     const TaskId c = src.add_child(r2).value();
-    ASSERT_TRUE(src.set_description(r1, "other").has_value());
-    ASSERT_TRUE(src.set_description(r2, "keep").has_value());
-    ASSERT_TRUE(src.set_description(c, "child").has_value());
+    ASSERT_TRUE(src.set_title(r1, "other").has_value());
+    ASSERT_TRUE(src.set_title(r2, "keep").has_value());
+    ASSERT_TRUE(src.set_title(c, "child").has_value());
 
     NodePool dst;
     ASSERT_TRUE(copy_subtree(src, r2, dst).has_value());
@@ -570,18 +570,18 @@ TEST(CopySubtree, AppendsAfterExistingRootsInDestination)
 {
     NodePool src;
     const TaskId s = src.add_root();
-    ASSERT_TRUE(src.set_description(s, "new").has_value());
+    ASSERT_TRUE(src.set_title(s, "new").has_value());
 
     NodePool dst;
     const TaskId existing = dst.add_root();
-    ASSERT_TRUE(dst.set_description(existing, "old").has_value());
+    ASSERT_TRUE(dst.set_title(existing, "old").has_value());
 
     ASSERT_TRUE(copy_subtree(src, s, dst).has_value());
 
     const auto order = dst.flatten();
     ASSERT_EQ(order.size(), 2u);
-    EXPECT_EQ(dst.get_description(order[0]).value(), "old");
-    EXPECT_EQ(dst.get_description(order[1]).value(), "new");
+    EXPECT_EQ(dst.get_title(order[0]).value(), "old");
+    EXPECT_EQ(dst.get_title(order[1]).value(), "new");
 }
 
 TEST(CopySubtree, RejectsStaleHandle)

@@ -137,12 +137,12 @@ EventResult handle_normal(
         return {.consumed = true, .command = std::nullopt};
     }
 
-    // i - enter Insert mode to edit description
+    // i - enter Insert mode to edit title
     if (event == ftxui::Event::i)
     {
         reset_d();
         state.mode = Mode::INSERT;
-        state.edit_field = EditField::DESCRIPTION;
+        state.edit_field = EditField::TITLE;
         state.edit_buffer.clear();
         return {.consumed = true, .command = std::nullopt};
     }
@@ -280,7 +280,7 @@ EventResult handle_insert(ViewState &state, const ftxui::Event &event)
     if (event == ftxui::Event::Escape)
     {
         state.mode = Mode::NORMAL;
-        state.edit_field = EditField::DESCRIPTION;
+        state.edit_field = EditField::TITLE;
         state.edit_buffer.clear();
         return {.consumed = true, .command = std::nullopt};
     }
@@ -291,12 +291,12 @@ EventResult handle_insert(ViewState &state, const ftxui::Event &event)
         state.edit_buffer.clear();
         state.mode = Mode::NORMAL;
         const EditField field = state.edit_field;
-        state.edit_field = EditField::DESCRIPTION;
+        state.edit_field = EditField::TITLE;
         if (field == EditField::DUE_DATE)
         {
             return {.consumed = true, .command = Command{CmdCommitDueDate{.text = std::move(text)}}};
         }
-        return {.consumed = true, .command = Command{CmdCommitEdit{.text = std::move(text)}}};
+        return {.consumed = true, .command = Command{CmdCommitTitle{.text = std::move(text)}}};
     }
 
     if (event == ftxui::Event::Backspace)
@@ -523,7 +523,7 @@ std::expected<void, core::Error> apply_command(
                     state.cursor = *result;
                 }
                 state.mode = Mode::INSERT;
-                state.edit_field = EditField::DESCRIPTION;
+                state.edit_field = EditField::TITLE;
                 state.edit_buffer.clear();
                 return {};
             }
@@ -544,7 +544,7 @@ std::expected<void, core::Error> apply_command(
                     state.cursor = *result;
                 }
                 state.mode = Mode::INSERT;
-                state.edit_field = EditField::DESCRIPTION;
+                state.edit_field = EditField::TITLE;
                 state.edit_buffer.clear();
                 return {};
             }
@@ -664,13 +664,13 @@ std::expected<void, core::Error> apply_command(
                 return {};
             }
 
-            if constexpr (std::is_same_v<T, CmdCommitEdit>)
+            if constexpr (std::is_same_v<T, CmdCommitTitle>)
             {
                 if (!state.cursor.is_valid() || c.text.empty())
                 {
                     return {};
                 }
-                return pool.set_description(state.cursor, c.text);
+                return pool.set_title(state.cursor, c.text);
             }
 
             if constexpr (std::is_same_v<T, CmdBeginDatePicker>)

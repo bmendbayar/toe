@@ -18,9 +18,9 @@ namespace toe::core
 // The on-disk format is a *faithful snapshot* of the pool: a fixed header
 // (magic, version, slot count, free-list head, root handle, live count, and the
 // compacted arena size) followed by every parallel slot array blitted verbatim,
-// then the description arena. Slots are preserved one-for-one, so handles —
+// then the title arena. Slots are preserved one-for-one, so handles —
 // including their generations and the free list — survive a save/load round
-// trip unchanged. The only thing dropped is orphaned description bytes: the
+// trip unchanged. The only thing dropped is orphaned title bytes: the
 // arena is compacted (live nodes only) on write, per the project's storage
 // decision, and freed slots are persisted blank so the file is deterministic.
 //

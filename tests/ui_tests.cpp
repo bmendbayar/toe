@@ -441,7 +441,7 @@ TEST(InsertMode, Backspace_PopsLastChar)
     EXPECT_EQ(state.edit_buffer, "ab");
 }
 
-TEST(InsertMode, Return_EmitsCmdCommitEdit_AndReturnToNormal)
+TEST(InsertMode, Return_EmitsCmdCommitTitle_AndReturnToNormal)
 {
     NodePool pool;
     ViewState state;
@@ -453,8 +453,8 @@ TEST(InsertMode, Return_EmitsCmdCommitEdit_AndReturnToNormal)
 
     EXPECT_TRUE(result.consumed);
     ASSERT_TRUE(result.command.has_value());
-    ASSERT_TRUE(std::holds_alternative<CmdCommitEdit>(*result.command));
-    EXPECT_EQ(std::get<CmdCommitEdit>(*result.command).text, "Buy milk");
+    ASSERT_TRUE(std::holds_alternative<CmdCommitTitle>(*result.command));
+    EXPECT_EQ(std::get<CmdCommitTitle>(*result.command).text, "Buy milk");
     EXPECT_EQ(state.mode, Mode::NORMAL);
     EXPECT_TRUE(state.edit_buffer.empty());
 }
@@ -475,7 +475,7 @@ TEST(InsertMode, Return_InDateField_EmitsCmdCommitDueDate)
     ASSERT_TRUE(std::holds_alternative<CmdCommitDueDate>(*result.command));
     EXPECT_EQ(std::get<CmdCommitDueDate>(*result.command).text, "2025-07-04");
     EXPECT_EQ(state.mode, Mode::NORMAL);
-    EXPECT_EQ(state.edit_field, EditField::DESCRIPTION);
+    EXPECT_EQ(state.edit_field, EditField::TITLE);
     EXPECT_TRUE(state.edit_buffer.empty());
 }
 
@@ -799,7 +799,7 @@ TEST(ApplyCommand, CycleStatus_AdvancesStatus)
     EXPECT_EQ(pool.get_status(a).value(), core::Status::IN_PROGRESS);
 }
 
-TEST(ApplyCommand, CommitEdit_SetsDescription)
+TEST(ApplyCommand, CommitEdit_SetsTitle)
 {
     NodePool pool;
     const TaskId a = pool.add_root();
@@ -808,29 +808,29 @@ TEST(ApplyCommand, CommitEdit_SetsDescription)
     const auto vis = compute_visible(pool, state.folded);
 
     ASSERT_TRUE(apply_command(
-                    Command{CmdCommitEdit{.text = "Buy milk"}}, pool, state, vis
+                    Command{CmdCommitTitle{.text = "Buy milk"}}, pool, state, vis
     )
                     .has_value());
 
-    EXPECT_EQ(pool.get_description(a).value(), "Buy milk");
+    EXPECT_EQ(pool.get_title(a).value(), "Buy milk");
 }
 
 TEST(ApplyCommand, CommitEdit_EmptyText_DoesNothing)
 {
     NodePool pool;
     const TaskId a = pool.add_root();
-    ASSERT_TRUE(pool.set_description(a, "existing").has_value());
+    ASSERT_TRUE(pool.set_title(a, "existing").has_value());
     ViewState state;
     state.cursor = a;
     const auto vis = compute_visible(pool, state.folded);
 
     ASSERT_TRUE(
-        apply_command(Command{CmdCommitEdit{.text = ""}}, pool, state, vis)
+        apply_command(Command{CmdCommitTitle{.text = ""}}, pool, state, vis)
             .has_value()
     );
 
-    // description unchanged
-    EXPECT_EQ(pool.get_description(a).value(), "existing");
+    // title unchanged
+    EXPECT_EQ(pool.get_title(a).value(), "existing");
 }
 
 TEST(ApplyCommand, Indent_ReparentsUnderPrevSibling)
@@ -1389,13 +1389,13 @@ TEST(Render, TreeStartsAtScrollOffset)
 {
     NodePool pool;
     TaskId id = pool.add_root();
-    ASSERT_TRUE(pool.set_description(id, "t0"));
+    ASSERT_TRUE(pool.set_title(id, "t0"));
     for (int i = 1; i < 10; ++i)
     {
         auto next = pool.add_sibling_after(id);
         ASSERT_TRUE(next.has_value());
         id = *next;
-        ASSERT_TRUE(pool.set_description(id, "t" + std::to_string(i)));
+        ASSERT_TRUE(pool.set_title(id, "t" + std::to_string(i)));
     }
 
     ViewState state;

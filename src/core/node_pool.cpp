@@ -18,7 +18,7 @@ NodePool::NodePool(const std::uint32_t reserve_slots)
     status_.reserve(reserve_slots);
     priority_.reserve(reserve_slots);
     due_date_.reserve(reserve_slots);
-    desc_.reserve(reserve_slots);
+    title_.reserve(reserve_slots);
 }
 
 TaskId NodePool::allocate()
@@ -38,7 +38,7 @@ TaskId NodePool::allocate()
         status_[index] = Status::TODO;
         priority_[index] = Priority::LOW;
         due_date_[index] = NO_DUE_DATE;
-        desc_[index] = DescSlice{};
+        title_[index] = TextSlice{};
         return TaskId{.index = index, .generation = generation_[index]};
     }
 
@@ -51,7 +51,7 @@ TaskId NodePool::allocate()
     status_.push_back(Status::TODO);
     priority_.push_back(Priority::LOW);
     due_date_.push_back(NO_DUE_DATE);
-    desc_.push_back(DescSlice{});
+    title_.push_back(TextSlice{});
     return TaskId{.index = index, .generation = 1};
 }
 
@@ -339,40 +339,40 @@ NodePool::set_due_date(const TaskId id, const std::optional<std::int64_t> date)
 }
 
 std::expected<std::string_view, Error>
-NodePool::get_description(const TaskId id) const
+NodePool::get_title(const TaskId id) const
 {
     if (!is_valid(id))
     {
         return std::unexpected(Error::STALE_HANDLE);
     }
-    const DescSlice &sl = desc_[id.index];
+    const TextSlice &sl = title_[id.index];
     if (sl.length == 0)
     {
         return std::string_view{};
     }
-    return std::string_view{desc_arena_.data() + sl.offset, sl.length};
+    return std::string_view{text_arena_.data() + sl.offset, sl.length};
 }
 
 std::expected<void, Error>
-NodePool::set_description(const TaskId id, const std::string_view desc)
+NodePool::set_title(const TaskId id, const std::string_view title)
 {
     if (!is_valid(id))
     {
         return std::unexpected(Error::STALE_HANDLE);
     }
-    if (desc.empty())
+    if (title.empty())
     {
-        return std::unexpected(Error::EMPTY_DESCRIPTION);
+        return std::unexpected(Error::EMPTY_TITLE);
     }
-    if (desc.size() > MAX_DESCRIPTION_BYTES)
+    if (title.size() > MAX_TITLE_BYTES)
     {
-        return std::unexpected(Error::DESCRIPTION_TOO_LONG);
+        return std::unexpected(Error::TITLE_TOO_LONG);
     }
     // Old arena bytes for this node are orphaned; compaction happens at save.
-    const auto offset = static_cast<std::uint32_t>(desc_arena_.size());
-    const auto length = static_cast<std::uint32_t>(desc.size());
-    desc_arena_.insert(desc_arena_.end(), desc.begin(), desc.end());
-    desc_[id.index] = DescSlice{.offset = offset, .length = length};
+    const auto offset = static_cast<std::uint32_t>(text_arena_.size());
+    const auto length = static_cast<std::uint32_t>(title.size());
+    text_arena_.insert(text_arena_.end(), title.begin(), title.end());
+    title_[id.index] = TextSlice{.offset = offset, .length = length};
     return {};
 }
 
@@ -541,10 +541,10 @@ std::expected<void, Error> copy_fields(const NodePool &src, TaskId from, NodePoo
     {
         return std::unexpected(due.error());
     }
-    const auto desc = src.get_description(from);
-    if (!desc)
+    const auto title = src.get_title(from);
+    if (!title)
     {
-        return std::unexpected(desc.error());
+        return std::unexpected(title.error());
     }
     if (auto r = dst.set_status(to, *status); !r)
     {
@@ -558,11 +558,11 @@ std::expected<void, Error> copy_fields(const NodePool &src, TaskId from, NodePoo
     {
         return r;
     }
-    if (desc->empty())
+    if (title->empty())
     {
-        return {};  // set_description rejects empty text; a fresh node is already empty
+        return {};  // set_title rejects empty text; a fresh node is already empty
     }
-    return dst.set_description(to, *desc);
+    return dst.set_title(to, *title);
 }
 
 }  // namespace

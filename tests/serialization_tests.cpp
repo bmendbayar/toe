@@ -50,7 +50,7 @@ void expect_equivalent(const NodePool &a, const NodePool &b)
         EXPECT_EQ(a.get_status(id).value(), b.get_status(id).value());
         EXPECT_EQ(a.get_priority(id).value(), b.get_priority(id).value());
         EXPECT_EQ(a.get_due_date(id).value(), b.get_due_date(id).value());
-        EXPECT_EQ(a.get_description(id).value(), b.get_description(id).value());
+        EXPECT_EQ(a.get_title(id).value(), b.get_title(id).value());
         EXPECT_EQ(a.parent(id).value(), b.parent(id).value());
         EXPECT_EQ(a.first_child(id).value(), b.first_child(id).value());
         EXPECT_EQ(a.next_sibling(id).value(), b.next_sibling(id).value());
@@ -96,8 +96,8 @@ TEST(Serialization, RoundTripPreservesFields)
     ASSERT_TRUE(pool.set_status(a, Status::IN_PROGRESS).has_value());
     ASSERT_TRUE(pool.set_priority(b, Priority::HIGH).has_value());
     ASSERT_TRUE(pool.set_due_date(c, 1'700'000'000).has_value());
-    ASSERT_TRUE(pool.set_description(a, "root task").has_value());
-    ASSERT_TRUE(pool.set_description(b, "child with a longer description").has_value());
+    ASSERT_TRUE(pool.set_title(a, "root task").has_value());
+    ASSERT_TRUE(pool.set_title(b, "child with a longer title").has_value());
 
     expect_round_trips(pool);
 
@@ -107,7 +107,7 @@ TEST(Serialization, RoundTripPreservesFields)
     EXPECT_EQ(loaded->get_status(a).value(), Status::IN_PROGRESS);
     EXPECT_EQ(loaded->get_priority(b).value(), Priority::HIGH);
     EXPECT_EQ(loaded->get_due_date(c).value(), std::optional<std::int64_t>{1'700'000'000});
-    EXPECT_EQ(loaded->get_description(a).value(), std::string_view{"root task"});
+    EXPECT_EQ(loaded->get_title(a).value(), std::string_view{"root task"});
 }
 
 TEST(Serialization, RoundTripPreservesMultiRootForest)
@@ -141,22 +141,22 @@ TEST(Serialization, RoundTripAfterDeletionPreservesFreeList)
     expect_equivalent(pool, loaded.value());
 }
 
-TEST(Serialization, CompactsOrphanedDescriptionBytes)
+TEST(Serialization, CompactsOrphanedTitleBytes)
 {
     NodePool pool;
     const TaskId id = pool.add_root();
-    // Re-editing orphans the first description's bytes in the live arena.
-    ASSERT_TRUE(pool.set_description(id, "the original, longer description").has_value());
-    ASSERT_TRUE(pool.set_description(id, "short").has_value());
+    // Re-editing orphans the first title's bytes in the live arena.
+    ASSERT_TRUE(pool.set_title(id, "the original, longer title").has_value());
+    ASSERT_TRUE(pool.set_title(id, "short").has_value());
 
     const std::vector<std::byte> bytes = serialize(pool);
     // One slot: arena follows 40-byte header + 50 bytes of slot arrays. The
-    // compacted arena must hold only the surviving 5-byte description.
+    // compacted arena must hold only the surviving 5-byte title.
     ASSERT_EQ(bytes.size(), 40u + 50u + 5u);
 
     const auto loaded = deserialize(bytes);
     ASSERT_TRUE(loaded.has_value());
-    EXPECT_EQ(loaded->get_description(id).value(), std::string_view{"short"});
+    EXPECT_EQ(loaded->get_title(id).value(), std::string_view{"short"});
 }
 
 TEST(Serialization, RoundTripDeepTreeNoStackOverflow)
@@ -168,7 +168,7 @@ TEST(Serialization, RoundTripDeepTreeNoStackOverflow)
     {
         cur = pool.add_child(cur).value();
     }
-    ASSERT_TRUE(pool.set_description(cur, "deepest").has_value());
+    ASSERT_TRUE(pool.set_title(cur, "deepest").has_value());
 
     const auto loaded = deserialize(serialize(pool));
     ASSERT_TRUE(loaded.has_value());
@@ -219,7 +219,7 @@ TEST(Serialization, RejectsTruncatedBody)
 {
     NodePool pool;
     const TaskId id = pool.add_root();
-    ASSERT_TRUE(pool.set_description(id, "payload").has_value());
+    ASSERT_TRUE(pool.set_title(id, "payload").has_value());
     std::vector<std::byte> bytes = serialize(pool);
     bytes.pop_back();  // drop the last arena byte the header still promises
 
@@ -272,19 +272,19 @@ TEST(Serialization, RejectsCorruptHandle)
     EXPECT_EQ(loaded.error(), Error::CORRUPT_DATA);
 }
 
-TEST(Serialization, RejectsCorruptDescriptionOffset)
+TEST(Serialization, RejectsCorruptTitleOffset)
 {
     NodePool pool;
     const TaskId a = pool.add_root();            // slot 0
     const TaskId b = pool.add_child(a).value();  // slot 1
-    ASSERT_TRUE(pool.set_description(b, "x").has_value());
+    ASSERT_TRUE(pool.set_title(b, "x").has_value());
     std::vector<std::byte> bytes = serialize(pool);
 
-    // desc array begins at kOffArrays + 42*slot_count; slot 1's offset word is
-    // the first 4 bytes of its DescSlice.
+    // title array begins at kOffArrays + 42*slot_count; slot 1's offset word is
+    // the first 4 bytes of its TextSlice.
     constexpr std::size_t slot_count = 2;
-    const std::size_t desc_base = kOffArrays + (42 * slot_count);
-    const std::size_t child_desc_offset = desc_base + (1 * 8);
+    const std::size_t title_base = kOffArrays + (42 * slot_count);
+    const std::size_t child_desc_offset = title_base + (1 * 8);
     poke_u32(bytes, child_desc_offset, 0xFFFF'FFF0);  // points past the arena
 
     const auto loaded = deserialize(bytes);
@@ -341,7 +341,7 @@ TEST(Serialization, SaveThenLoadRoundTripsThroughFile)
     NodePool pool;
     const TaskId a = pool.add_root();
     const TaskId b = pool.add_child(a).value();
-    ASSERT_TRUE(pool.set_description(b, "persisted").has_value());
+    ASSERT_TRUE(pool.set_title(b, "persisted").has_value());
 
     const fs::path path = tasks_path();
     ASSERT_TRUE(save(pool, path).has_value());
@@ -412,8 +412,8 @@ TEST(Serialization, ExportedSubtreeSurvivesSaveLoadAndAppends)
     NodePool src;
     const TaskId r = src.add_root();
     const TaskId c = src.add_child(r).value();
-    ASSERT_TRUE(src.set_description(r, "proj").has_value());
-    ASSERT_TRUE(src.set_description(c, "step").has_value());
+    ASSERT_TRUE(src.set_title(r, "proj").has_value());
+    ASSERT_TRUE(src.set_title(c, "step").has_value());
 
     // First export creates the file; second appends a second root.
     for (int i = 0; i < 2; ++i)
@@ -431,10 +431,10 @@ TEST(Serialization, ExportedSubtreeSurvivesSaveLoadAndAppends)
     ASSERT_TRUE(result.has_value());
     const auto order = result->flatten();
     ASSERT_EQ(order.size(), 4u);
-    EXPECT_EQ(result->get_description(order[0]).value(), "proj");
-    EXPECT_EQ(result->get_description(order[1]).value(), "step");
-    EXPECT_EQ(result->get_description(order[2]).value(), "proj");
-    EXPECT_EQ(result->get_description(order[3]).value(), "step");
+    EXPECT_EQ(result->get_title(order[0]).value(), "proj");
+    EXPECT_EQ(result->get_title(order[1]).value(), "step");
+    EXPECT_EQ(result->get_title(order[2]).value(), "proj");
+    EXPECT_EQ(result->get_title(order[3]).value(), "step");
 
     fs::remove(path);
 }

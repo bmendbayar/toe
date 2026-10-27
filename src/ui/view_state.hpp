@@ -37,7 +37,7 @@ using FoldSet = std::unordered_set<core::TaskId, TaskIdHash>;
 
 enum class EditField : std::uint8_t
 {
-    DESCRIPTION,
+    TITLE,
     DUE_DATE,
 };
 
@@ -50,7 +50,7 @@ struct ViewState
 {
     Mode mode = Mode::NORMAL;
     ViewMode view_mode = ViewMode::TREE;
-    EditField edit_field = EditField::DESCRIPTION;  // which field 'i'/D edits
+    EditField edit_field = EditField::TITLE;  // which field 'i'/D edits
     core::TaskId cursor;                            // focused task; invalid() = no focus
     FoldSet folded;                                 // roots of collapsed subtrees
     std::string edit_buffer;                        // accumulator in Insert mode

@@ -26,14 +26,14 @@ enum class Error : std::uint8_t
     // therefore cannot be outdented further.
     NO_PARENT,
 
-    // set_description was called with an empty string_view. The description
+    // set_title was called with an empty string_view. The title
     // field requires at least one character; use a separate clear operation to
-    // remove an existing description.
-    EMPTY_DESCRIPTION,
+    // remove an existing title.
+    EMPTY_TITLE,
 
-    // set_description was called with a string longer than kMaxDescriptionBytes.
-    // The arena append is rejected so the old description (if any) is preserved.
-    DESCRIPTION_TOO_LONG,
+    // set_title was called with a string longer than kMaxTitleBytes.
+    // The arena append is rejected so the old title (if any) is preserved.
+    TITLE_TOO_LONG,
 
     // The serialized blob does not begin with the expected 4-byte magic. The
     // file is not a toe save (or its first bytes are clobbered).
@@ -48,7 +48,7 @@ enum class Error : std::uint8_t
     TRUNCATED_DATA,
 
     // The blob is the right length but internally inconsistent: a stored handle
-    // or description slice points out of range, the free list is malformed, an
+    // or title slice points out of range, the free list is malformed, an
     // enum is out of range, or trailing bytes remain. Refused, never trusted.
     CORRUPT_DATA,
 

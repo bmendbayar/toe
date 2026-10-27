@@ -48,11 +48,11 @@ TEST(Fields, DefaultDueDateIsAbsent)
     EXPECT_FALSE(result.value().has_value());
 }
 
-TEST(Fields, DefaultDescriptionIsEmpty)
+TEST(Fields, DefaultTitleIsEmpty)
 {
     NodePool pool;
     const TaskId id = pool.add_root();
-    const auto result = pool.get_description(id);
+    const auto result = pool.get_title(id);
     ASSERT_TRUE(result.has_value());
     EXPECT_TRUE(result.value().empty());
 }
@@ -107,13 +107,13 @@ TEST(Fields, ClearDueDateReturnsAbsent)
     EXPECT_FALSE(result.value().has_value());
 }
 
-TEST(Fields, SetAndGetDescription)
+TEST(Fields, SetAndGetTitle)
 {
     NodePool pool;
     const TaskId id = pool.add_root();
 
-    ASSERT_TRUE(pool.set_description(id, "buy groceries").has_value());
-    const auto result = pool.get_description(id);
+    ASSERT_TRUE(pool.set_title(id, "buy groceries").has_value());
+    const auto result = pool.get_title(id);
     ASSERT_TRUE(result.has_value());
     EXPECT_EQ(result.value(), "buy groceries");
 }
@@ -158,32 +158,32 @@ TEST(Fields, AdvancePriorityCyclesThroughAllValues)
     EXPECT_EQ(r.value(), Priority::LOW);  // wrapped
 }
 
-TEST(Fields, SetDescriptionOverwritesPreviousValue)
+TEST(Fields, SetTitleOverwritesPreviousValue)
 {
     NodePool pool;
     const TaskId id = pool.add_root();
 
-    ASSERT_TRUE(pool.set_description(id, "first").has_value());
-    ASSERT_TRUE(pool.set_description(id, "second").has_value());
+    ASSERT_TRUE(pool.set_title(id, "first").has_value());
+    ASSERT_TRUE(pool.set_title(id, "second").has_value());
 
     // Only the latest value is visible; old arena bytes are orphaned.
-    EXPECT_EQ(pool.get_description(id).value(), "second");
+    EXPECT_EQ(pool.get_title(id).value(), "second");
 }
 
-TEST(Fields, SetDescriptionOnMultipleNodesAreIndependent)
+TEST(Fields, SetTitleOnMultipleNodesAreIndependent)
 {
     NodePool pool;
     const TaskId a = pool.add_root();
     const TaskId b = pool.add_root();
 
-    ASSERT_TRUE(pool.set_description(a, "alpha").has_value());
-    ASSERT_TRUE(pool.set_description(b, "beta").has_value());
+    ASSERT_TRUE(pool.set_title(a, "alpha").has_value());
+    ASSERT_TRUE(pool.set_title(b, "beta").has_value());
 
-    EXPECT_EQ(pool.get_description(a).value(), "alpha");
-    EXPECT_EQ(pool.get_description(b).value(), "beta");
+    EXPECT_EQ(pool.get_title(a).value(), "alpha");
+    EXPECT_EQ(pool.get_title(b).value(), "beta");
 }
 
-TEST(Fields, ManyDescriptionEditsGrowArenaWithoutAliasing)
+TEST(Fields, ManyTitleEditsGrowArenaWithoutAliasing)
 {
     NodePool pool;
     const TaskId id = pool.add_root();
@@ -191,40 +191,40 @@ TEST(Fields, ManyDescriptionEditsGrowArenaWithoutAliasing)
     for (int i = 0; i < 500; ++i)
     {
         const std::string s = "task " + std::to_string(i);
-        ASSERT_TRUE(pool.set_description(id, s).has_value());
-        EXPECT_EQ(pool.get_description(id).value(), s);
+        ASSERT_TRUE(pool.set_title(id, s).has_value());
+        EXPECT_EQ(pool.get_title(id).value(), s);
     }
 }
 
-TEST(Fields, SetDescriptionRejectsEmpty)
+TEST(Fields, SetTitleRejectsEmpty)
 {
     NodePool pool;
     const TaskId id = pool.add_root();
 
-    const auto result = pool.set_description(id, "");
+    const auto result = pool.set_title(id, "");
     ASSERT_FALSE(result.has_value());
-    EXPECT_EQ(result.error(), Error::EMPTY_DESCRIPTION);
+    EXPECT_EQ(result.error(), Error::EMPTY_TITLE);
 }
 
-TEST(Fields, SetDescriptionRejectsTooLong)
+TEST(Fields, SetTitleRejectsTooLong)
 {
     NodePool pool;
     const TaskId id = pool.add_root();
 
-    const std::string too_long(MAX_DESCRIPTION_BYTES + 1, 'x');
-    const auto result = pool.set_description(id, too_long);
+    const std::string too_long(MAX_TITLE_BYTES + 1, 'x');
+    const auto result = pool.set_title(id, too_long);
     ASSERT_FALSE(result.has_value());
-    EXPECT_EQ(result.error(), Error::DESCRIPTION_TOO_LONG);
+    EXPECT_EQ(result.error(), Error::TITLE_TOO_LONG);
 }
 
-TEST(Fields, SetDescriptionAtExactLimitSucceeds)
+TEST(Fields, SetTitleAtExactLimitSucceeds)
 {
     NodePool pool;
     const TaskId id = pool.add_root();
 
-    const std::string at_limit(MAX_DESCRIPTION_BYTES, 'y');
-    EXPECT_TRUE(pool.set_description(id, at_limit).has_value());
-    EXPECT_EQ(pool.get_description(id).value().size(), MAX_DESCRIPTION_BYTES);
+    const std::string at_limit(MAX_TITLE_BYTES, 'y');
+    EXPECT_TRUE(pool.set_title(id, at_limit).has_value());
+    EXPECT_EQ(pool.get_title(id).value().size(), MAX_TITLE_BYTES);
 }
 
 TEST(Fields, GetStatusRejectsStaleHandle)
@@ -315,24 +315,24 @@ TEST(Fields, SetDueDateRejectsStaleHandle)
     EXPECT_EQ(result.error(), Error::STALE_HANDLE);
 }
 
-TEST(Fields, GetDescriptionRejectsStaleHandle)
+TEST(Fields, GetTitleRejectsStaleHandle)
 {
     NodePool pool;
     const TaskId id = pool.add_root();
     ASSERT_TRUE(pool.remove_subtree(id).has_value());
 
-    const auto result = pool.get_description(id);
+    const auto result = pool.get_title(id);
     ASSERT_FALSE(result.has_value());
     EXPECT_EQ(result.error(), Error::STALE_HANDLE);
 }
 
-TEST(Fields, SetDescriptionRejectsStaleHandle)
+TEST(Fields, SetTitleRejectsStaleHandle)
 {
     NodePool pool;
     const TaskId id = pool.add_root();
     ASSERT_TRUE(pool.remove_subtree(id).has_value());
 
-    const auto result = pool.set_description(id, "hello");
+    const auto result = pool.set_title(id, "hello");
     ASSERT_FALSE(result.has_value());
     EXPECT_EQ(result.error(), Error::STALE_HANDLE);
 }
@@ -347,7 +347,7 @@ TEST(Fields, FreedSlotFieldsResetOnReuse)
     ASSERT_TRUE(pool.set_status(first, Status::DONE).has_value());
     ASSERT_TRUE(pool.set_priority(first, Priority::HIGH).has_value());
     ASSERT_TRUE(pool.set_due_date(first, 9'999'999LL).has_value());
-    ASSERT_TRUE(pool.set_description(first, "stale data").has_value());
+    ASSERT_TRUE(pool.set_title(first, "stale data").has_value());
 
     ASSERT_TRUE(pool.remove_subtree(first).has_value());
 
@@ -356,7 +356,7 @@ TEST(Fields, FreedSlotFieldsResetOnReuse)
     EXPECT_EQ(pool.get_status(reused).value(), Status::TODO);
     EXPECT_EQ(pool.get_priority(reused).value(), Priority::LOW);
     EXPECT_FALSE(pool.get_due_date(reused).value().has_value());
-    EXPECT_TRUE(pool.get_description(reused).value().empty());
+    EXPECT_TRUE(pool.get_title(reused).value().empty());
 }
 
 }  // namespace toe::core

@@ -61,7 +61,7 @@ int task_depth(const core::NodePool &pool, core::TaskId id)
 
     const auto status = pool.get_status(id).value_or(core::Status::TODO);
     const auto priority = pool.get_priority(id).value_or(core::Priority::LOW);
-    const auto desc_sv = pool.get_description(id).value_or(std::string_view{});
+    const auto title_sv = pool.get_title(id).value_or(std::string_view{});
 
     const bool has_children =
         pool.first_child(id).value_or(core::TaskId::invalid()).is_valid();
@@ -69,14 +69,14 @@ int task_depth(const core::NodePool &pool, core::TaskId id)
     const std::string_view fold_marker =
         has_children ? (is_folded ? "▶ " : "▼ ") : "  ";
 
-    Element desc_elem = text(desc_sv.empty() ? "<no description>" : std::string(desc_sv));
-    if (desc_sv.empty() || status == core::Status::DONE)
+    Element title_elem = text(title_sv.empty() ? "<untitled>" : std::string(title_sv));
+    if (title_sv.empty() || status == core::Status::DONE)
     {
-        desc_elem = dim(std::move(desc_elem));
+        title_elem = dim(std::move(title_elem));
     }
     if (status == core::Status::DONE)
     {
-        desc_elem = strikethrough(std::move(desc_elem));
+        title_elem = strikethrough(std::move(title_elem));
     }
 
     Element prio_elem = [&]() -> Element {
@@ -101,7 +101,7 @@ int task_depth(const core::NodePool &pool, core::TaskId id)
         text(" "),
         std::move(prio_elem),
         text(" "),
-        std::move(desc_elem),
+        std::move(title_elem),
     };
     if (due_opt.has_value())
     {
@@ -220,8 +220,8 @@ inline constexpr int kTimelineSpanDays = 14;
 // Width of each day cell in the timeline grid (chars): " DD " = 4.
 inline constexpr int kTimelineCellWidth = 4;
 
-// Width of the description column in the timeline panel (chars).
-inline constexpr int kTimelineDescWidth = 18;
+// Width of the title column in the timeline panel (chars).
+inline constexpr int kTimelineTitleWidth = 18;
 
 [[nodiscard]] ftxui::Color row_color_to_ftxui(RowColor rc)
 {
@@ -262,8 +262,8 @@ inline constexpr int kTimelineDescWidth = 18;
         }
         const auto prio = pool.get_priority(id).value_or(core::Priority::LOW);
         const auto urg = due_urgency(*due_opt, now_epoch);
-        const auto desc = pool.get_description(id).value_or(std::string_view{});
-        dated.push_back(DatedTask{.id = id, .due_epoch = *due_opt, .priority = prio, .urgency = urg, .description = desc});
+        const auto title = pool.get_title(id).value_or(std::string_view{});
+        dated.push_back(DatedTask{.id = id, .due_epoch = *due_opt, .priority = prio, .urgency = urg, .title = title});
     }
 
     const std::vector<TimelineRow> rows =
@@ -346,12 +346,12 @@ inline constexpr int kTimelineDescWidth = 18;
     }
     flush_month();
 
-    // Description column header (blank, same width as desc column).
-    const std::string desc_pad(kTimelineDescWidth + 2, ' ');
+    // Title column header (blank, same width as title column).
+    const std::string title_pad(kTimelineTitleWidth + 2, ' ');
 
     Elements header_rows;
-    header_rows.push_back(hbox({text(desc_pad), hbox(std::move(month_header))}));
-    header_rows.push_back(hbox({text(desc_pad), hbox(std::move(day_header))}));
+    header_rows.push_back(hbox({text(title_pad), hbox(std::move(month_header))}));
+    header_rows.push_back(hbox({text(title_pad), hbox(std::move(day_header))}));
 
     // --- task rows -------------------------------------------------------------
     Elements task_rows;
@@ -359,18 +359,18 @@ inline constexpr int kTimelineDescWidth = 18;
 
     for (const TimelineRow &row : rows)
     {
-        // Description: fixed-width column, truncate with '…' if too long.
-        std::string desc_str(row.description);
-        if (static_cast<int>(desc_str.size()) > kTimelineDescWidth)
+        // Title: fixed-width column, truncate with '…' if too long.
+        std::string title_str(row.title);
+        if (static_cast<int>(title_str.size()) > kTimelineTitleWidth)
         {
-            desc_str.resize(static_cast<std::size_t>(kTimelineDescWidth - 1));
-            desc_str += '\xe2';
-            desc_str += '\x80';
-            desc_str += '\xa6';  // UTF-8 '…'
+            title_str.resize(static_cast<std::size_t>(kTimelineTitleWidth - 1));
+            title_str += '\xe2';
+            title_str += '\x80';
+            title_str += '\xa6';  // UTF-8 '…'
         }
-        while (static_cast<int>(desc_str.size()) < kTimelineDescWidth)
+        while (static_cast<int>(title_str.size()) < kTimelineTitleWidth)
         {
-            desc_str += ' ';
+            title_str += ' ';
         }
 
         const Color bar_color = row_color_to_ftxui(timeline_row_color(row.priority, row.urgency));
@@ -420,7 +420,7 @@ inline constexpr int kTimelineDescWidth = 18;
 
         Element task_row = hbox({
             text("  "),
-            text(desc_str),
+            text(title_str),
             hbox(std::move(bar_elems)),
         });
 

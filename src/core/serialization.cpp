@@ -32,7 +32,7 @@ constexpr std::size_t HEADER_BYTES = 40;
 
 // Per-slot on-disk footprint, summed across every parallel array:
 // generation(4) + next_free(4) + parent(8) + first_child(8) + next_sibling(8)
-// + status(1) + priority(1) + due_date(8) + desc(8).
+// + status(1) + priority(1) + due_date(8) + title(8).
 constexpr std::size_t PER_SLOT_BYTES = 50;
 
 // --- Writing ----------------------------------------------------------------
@@ -128,7 +128,7 @@ std::vector<std::byte> serialize(const NodePool &pool)
 {
     const auto slot_count = static_cast<std::uint32_t>(pool.generation_.size());
 
-    // Mark freed slots by walking the free list; their links and descriptions
+    // Mark freed slots by walking the free list; their links and titles
     // are stale garbage and must not leak into the file.
     std::vector<bool> is_free(slot_count, false);
     for (std::uint32_t i = pool.free_head_; i != NodePool::NIL; i = pool.next_free_[i])
@@ -136,11 +136,11 @@ std::vector<std::byte> serialize(const NodePool &pool)
         is_free[i] = true;
     }
 
-    // Build the compacted views: copy each live node's description bytes into a
+    // Build the compacted views: copy each live node's title bytes into a
     // fresh arena (rewriting its offset), and blank out every freed slot so the
     // reader's live-slot validation never trips over leftover links.
     std::vector<char> arena;
-    std::vector<DescSlice> desc(slot_count);
+    std::vector<TextSlice> title(slot_count);
     std::vector<TaskId> parent(slot_count);
     std::vector<TaskId> first_child(slot_count);
     std::vector<TaskId> next_sibling(slot_count);
@@ -148,21 +148,21 @@ std::vector<std::byte> serialize(const NodePool &pool)
     {
         if (is_free[i])
         {
-            continue;  // links/desc stay default-invalid for freed slots
+            continue;  // links/title stay default-invalid for freed slots
         }
         parent[i] = pool.parent_[i];
         first_child[i] = pool.first_child_[i];
         next_sibling[i] = pool.next_sibling_[i];
 
-        const DescSlice &sl = pool.desc_[i];
+        const TextSlice &sl = pool.title_[i];
         if (sl.length == 0)
         {
             continue;
         }
         const auto offset = static_cast<std::uint32_t>(arena.size());
-        const auto *begin = pool.desc_arena_.data() + sl.offset;
+        const auto *begin = pool.text_arena_.data() + sl.offset;
         arena.insert(arena.end(), begin, begin + sl.length);
-        desc[i] = DescSlice{.offset = offset, .length = sl.length};
+        title[i] = TextSlice{.offset = offset, .length = sl.length};
     }
 
     std::vector<std::byte> out;
@@ -185,7 +185,7 @@ std::vector<std::byte> serialize(const NodePool &pool)
     put_array(out, pool.status_);
     put_array(out, pool.priority_);
     put_array(out, pool.due_date_);
-    put_array(out, desc);
+    put_array(out, title);
     append_bytes(out, arena.data(), arena.size());
 
     return out;
@@ -236,7 +236,7 @@ std::expected<NodePool, Error> deserialize(const std::span<const std::byte> byte
     std::vector<Status> status;
     std::vector<Priority> priority;
     std::vector<std::int64_t> due_date;
-    std::vector<DescSlice> desc;
+    std::vector<TextSlice> title;
     std::vector<char> arena;
     if (const auto e = r.read_array(generation, slot_count); !e) return std::unexpected(e.error());
     if (const auto e = r.read_array(next_free, slot_count); !e) return std::unexpected(e.error());
@@ -246,7 +246,7 @@ std::expected<NodePool, Error> deserialize(const std::span<const std::byte> byte
     if (const auto e = r.read_array(status, slot_count); !e) return std::unexpected(e.error());
     if (const auto e = r.read_array(priority, slot_count); !e) return std::unexpected(e.error());
     if (const auto e = r.read_array(due_date, slot_count); !e) return std::unexpected(e.error());
-    if (const auto e = r.read_array(desc, slot_count); !e) return std::unexpected(e.error());
+    if (const auto e = r.read_array(title, slot_count); !e) return std::unexpected(e.error());
     if (const auto e = r.read_array(arena, static_cast<std::size_t>(arena_size)); !e)
     {
         return std::unexpected(e.error());
@@ -317,7 +317,7 @@ std::expected<NodePool, Error> deserialize(const std::span<const std::byte> byte
         {
             return std::unexpected(Error::CORRUPT_DATA);
         }
-        if (const DescSlice &sl = desc[i];
+        if (const TextSlice &sl = title[i];
             sl.length != 0 &&
             (sl.offset > arena_size || sl.length > arena_size - sl.offset))
         {
@@ -339,8 +339,8 @@ std::expected<NodePool, Error> deserialize(const std::span<const std::byte> byte
     pool.status_ = std::move(status);
     pool.priority_ = std::move(priority);
     pool.due_date_ = std::move(due_date);
-    pool.desc_ = std::move(desc);
-    pool.desc_arena_ = std::move(arena);
+    pool.title_ = std::move(title);
+    pool.text_arena_ = std::move(arena);
     pool.root_ = root.is_valid() ? root : TaskId::invalid();
     pool.free_head_ = free_head;
     pool.live_count_ = static_cast<std::size_t>(live_count);

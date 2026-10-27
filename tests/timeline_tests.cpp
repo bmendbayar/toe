@@ -19,7 +19,7 @@ static DatedTask make_task(std::int64_t start_epoch, int offset_days, Priority p
         .due_epoch = add_days(start_epoch, offset_days),
         .priority = p,
         .urgency = u,
-        .description = "task",
+        .title = "task",
     };
 }
 
@@ -179,21 +179,21 @@ TEST(TimelineRowColor, LowPrioritySoonIsNormalColor)
 
 // --- TimelineRow carries correct metadata ------------------------------------
 
-TEST(Timeline, RowCarriesDescriptionPriorityUrgency)
+TEST(Timeline, RowCarriesTitlePriorityUrgency)
 {
     DatedTask t{
         .id = TaskId::invalid(),
         .due_epoch = add_days(kStart, 2),
         .priority = Priority::HIGH,
         .urgency = Urgency::SOON,
-        .description = "important task",
+        .title = "important task",
     };
     const auto rows = layout_timeline({&t, 1}, kStart, 7);
     ASSERT_EQ(rows.size(), 1u);
     EXPECT_EQ(rows[0].col, 2);
     EXPECT_EQ(rows[0].priority, Priority::HIGH);
     EXPECT_EQ(rows[0].urgency, Urgency::SOON);
-    EXPECT_EQ(rows[0].description, "important task");
+    EXPECT_EQ(rows[0].title, "important task");
 }
 
 }  // namespace toe::ui
