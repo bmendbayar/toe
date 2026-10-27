@@ -103,6 +103,10 @@ int task_depth(const core::NodePool &pool, core::TaskId id)
         text(" "),
         std::move(title_elem),
     };
+    if (!pool.get_description(id).value_or(std::string_view{}).empty())
+    {
+        row_elems.push_back(text(" ✎") | dim);
+    }
     if (due_opt.has_value())
     {
         const Urgency urg = due_urgency(*due_opt, now_epoch);
@@ -449,11 +453,61 @@ inline constexpr int kTimelineTitleWidth = 18;
     return vbox(std::move(panel));
 }
 
+int details_pane_rows(const ViewState &state, const int screen_cols)
+{
+    if (!state.show_details || state.mode == Mode::DATE_PICKER || screen_cols >= NARROW_COLS)
+    {
+        return 0;
+    }
+    return DETAILS_PANE_ROWS;
+}
+
+ftxui::Element render_details(const core::NodePool &pool, const ViewState &state)
+{
+    using namespace ftxui;
+
+    if (!pool.is_valid(state.cursor))
+    {
+        return text("No task selected") | dim | border;
+    }
+
+    const auto title = pool.get_title(state.cursor).value_or(std::string_view{});
+    const auto description = pool.get_description(state.cursor).value_or(std::string_view{});
+
+    Elements lines;
+    lines.push_back(title.empty() ? text("<untitled>") | dim : paragraph(std::string(title)) | bold);
+    lines.push_back(separator());
+    if (description.empty())
+    {
+        lines.push_back(text("No description — press e to add.") | dim);
+    }
+    else
+    {
+        // One paragraph per source line so wrapping stays within a line; blank
+        // lines become a single space (an empty paragraph collapses to nothing).
+        std::size_t pos = 0;
+        while (pos <= description.size())
+        {
+            const std::size_t nl = description.find('\n', pos);
+            const std::size_t end = (nl == std::string_view::npos) ? description.size() : nl;
+            const std::string_view line = description.substr(pos, end - pos);
+            lines.push_back(line.empty() ? text(" ") : paragraph(std::string(line)));
+            if (nl == std::string_view::npos)
+            {
+                break;
+            }
+            pos = nl + 1;
+        }
+    }
+    return vbox(std::move(lines)) | border;
+}
+
 ftxui::Element render(
     const core::NodePool &pool,
     const ViewState &state,
     const std::vector<core::TaskId> &visible,
-    std::int64_t now_epoch
+    std::int64_t now_epoch,
+    int screen_cols
 )
 {
     using namespace ftxui;
@@ -483,12 +537,26 @@ ftxui::Element render(
         );
     }
 
-    if (state.view_mode == ViewMode::TIMELINE)
-    {
-        return render_timeline(pool, state, visible, now_epoch);
-    }
+    Element body = (state.view_mode == ViewMode::TIMELINE)
+                       ? render_timeline(pool, state, visible, now_epoch)
+                       : std::move(task_list);
 
-    return task_list;
+    if (!state.show_details)
+    {
+        return body;
+    }
+    if (screen_cols < NARROW_COLS)
+    {
+        return vbox({
+            std::move(body) | flex,
+            render_details(pool, state) | size(HEIGHT, EQUAL, DETAILS_PANE_ROWS),
+        });
+    }
+    const int width = std::clamp(screen_cols / 3, 30, 60);
+    return hbox({
+        std::move(body) | flex,
+        render_details(pool, state) | size(WIDTH, EQUAL, width),
+    });
 }
 
 ftxui::Element render_status_bar(const ViewState &state)

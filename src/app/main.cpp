@@ -1,7 +1,10 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/dom/elements.hpp>
@@ -12,10 +15,14 @@
 #include <string_view>
 #include <variant>
 
+#include <sys/wait.h>
+#include <unistd.h>
+
 #include "core/error.hpp"
 #include "core/node_pool.hpp"
 #include "core/serialization.hpp"
 #include "ui/commands.hpp"
+#include "ui/editor_text.hpp"
 #include "ui/key_handler.hpp"
 #include "ui/renderer.hpp"
 #include "ui/view_state.hpp"
@@ -130,6 +137,105 @@ std::string export_subtree(
     return "exported subtree to " + dest.string();
 }
 
+// POSIX single-quote escaping so the temp path survives `sh -c`.
+std::string shell_quote(const std::string &s)
+{
+    std::string out = "'";
+    for (const char c : s)
+    {
+        if (c == '\'')
+        {
+            out += "'\\''";
+        }
+        else
+        {
+            out += c;
+        }
+    }
+    out += '\'';
+    return out;
+}
+
+// Edit the cursor task's description in $VISUAL / $EDITOR (fallback vi) via a
+// temp file, with the TUI suspended. Returns a status-line message ("" if
+// nothing to report); sets `dirty` when the description changed.
+std::string edit_description(
+    ftxui::ScreenInteractive &screen,
+    toe::core::NodePool &pool,
+    toe::core::TaskId cursor,
+    bool &dirty
+)
+{
+    namespace fs = std::filesystem;
+    const auto current_view = pool.get_description(cursor);
+    if (!current_view)
+    {
+        return "nothing to edit";
+    }
+    const std::string current{*current_view};  // copy: set_description invalidates views
+
+    std::string tmpl = (fs::temp_directory_path() / "toe-XXXXXX.md").string();
+    const int fd = ::mkstemps(tmpl.data(), 3);
+    if (fd < 0)
+    {
+        return "couldn't create temp file for editor";
+    }
+    ::close(fd);
+    const fs::path tmp{tmpl};
+    const auto cleanup = [&] {
+        std::error_code ec;
+        fs::remove(tmp, ec);
+    };
+
+    {
+        std::ofstream os{tmp, std::ios::binary | std::ios::trunc};
+        os << current;
+        if (!os)
+        {
+            cleanup();
+            return "couldn't write temp file for editor";
+        }
+    }
+
+    const char *visual = std::getenv("VISUAL");
+    const char *editor_env = std::getenv("EDITOR");
+    const std::string editor = (visual != nullptr && *visual != '\0') ? visual
+                               : (editor_env != nullptr && *editor_env != '\0') ? editor_env
+                                                                                 : "vi";
+    const std::string command = editor + " " + shell_quote(tmp.string());
+
+    int rc = -1;
+    screen.WithRestoredIO([&] { rc = std::system(command.c_str()); })();
+    if (rc == -1 || !WIFEXITED(rc) || WEXITSTATUS(rc) != 0)
+    {
+        cleanup();
+        return "editor exited with error — description unchanged";
+    }
+
+    std::ifstream is{tmp, std::ios::binary};
+    if (!is)
+    {
+        cleanup();
+        return "couldn't read back edited description";
+    }
+    const std::string raw{std::istreambuf_iterator<char>{is}, std::istreambuf_iterator<char>{}};
+    cleanup();
+
+    const std::string edited = toe::ui::normalize_editor_text(raw);
+    if (edited == current)
+    {
+        return "";
+    }
+    if (auto r = pool.set_description(cursor, edited); !r)
+    {
+        return r.error() == toe::core::Error::DESCRIPTION_TOO_LONG
+                   ? "description too long (max 64 KiB) — unchanged"
+                   : "couldn't save description";
+    }
+    dirty = true;
+    return "";
+}
+
 }  // namespace
 
 int main(int argc, char **argv)
@@ -181,10 +287,12 @@ int main(int argc, char **argv)
                                    .count();
         const auto visible = toe::ui::compute_visible(pool, state.folded);
         // Terminal::Size() rather than screen.dimy(): the screen resizes after Render().
-        const int reserved = status_message.empty() ? 1 : 2;  // mode bar (+ message line)
+        const int screen_cols = ftxui::Terminal::Size().dimx;
+        const int reserved = (status_message.empty() ? 1 : 2) +  // mode bar (+ message line)
+                             toe::ui::details_pane_rows(state, screen_cols);
         const int body_rows = std::max(0, ftxui::Terminal::Size().dimy - reserved);
         toe::ui::update_tree_scroll(state, visible, static_cast<std::size_t>(body_rows));
-        auto body = toe::ui::render(pool, state, visible, now_epoch);
+        auto body = toe::ui::render(pool, state, visible, now_epoch, screen_cols);
         auto status = toe::ui::render_status_bar(state);
         if (status_message.empty())
         {
@@ -258,6 +366,10 @@ int main(int argc, char **argv)
         else if (const auto *exp = std::get_if<toe::ui::CmdExport>(&cmd))
         {
             status_message = export_subtree(pool, state.cursor, path, exp->target);
+        }
+        else if (std::holds_alternative<toe::ui::CmdEditDescription>(cmd))
+        {
+            status_message = edit_description(screen, pool, state.cursor, dirty);
         }
         else
         {

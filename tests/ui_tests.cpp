@@ -11,6 +11,7 @@
 #include "core/task_id.hpp"
 #include "ui/commands.hpp"
 #include "ui/date_util.hpp"
+#include "ui/editor_text.hpp"
 #include "ui/key_handler.hpp"
 #include "ui/renderer.hpp"
 #include "ui/scroll.hpp"
@@ -1408,6 +1409,165 @@ TEST(Render, TreeStartsAtScrollOffset)
 
     EXPECT_NE(out.find("t5"), std::string::npos);
     EXPECT_EQ(out.find("t0"), std::string::npos);
+}
+
+// --- descriptions -------------------------------------------------------------
+
+TEST(NormalMode, K_TogglesDetailsPane)
+{
+    NodePool pool;
+    ViewState state;
+    const auto vis = compute_visible(pool, state.folded);
+
+    auto result = process_event(state, vis, ftxui::Event::K);
+    EXPECT_TRUE(result.consumed);
+    EXPECT_FALSE(result.command.has_value());
+    EXPECT_TRUE(state.show_details);
+
+    result = process_event(state, vis, ftxui::Event::K);
+    EXPECT_TRUE(result.consumed);
+    EXPECT_FALSE(state.show_details);
+}
+
+TEST(NormalMode, e_WithCursor_EmitsCmdEditDescription)
+{
+    NodePool pool;
+    ViewState state;
+    state.cursor = pool.add_root();
+    const auto vis = compute_visible(pool, state.folded);
+
+    const auto result = process_event(state, vis, ftxui::Event::e);
+
+    EXPECT_TRUE(result.consumed);
+    ASSERT_TRUE(result.command.has_value());
+    EXPECT_TRUE(std::holds_alternative<CmdEditDescription>(*result.command));
+    EXPECT_EQ(state.mode, Mode::NORMAL);
+}
+
+TEST(NormalMode, e_WithoutCursor_EmitsNothing)
+{
+    NodePool pool;
+    ViewState state;
+    const auto vis = compute_visible(pool, state.folded);
+
+    const auto result = process_event(state, vis, ftxui::Event::e);
+
+    EXPECT_TRUE(result.consumed);
+    EXPECT_FALSE(result.command.has_value());
+}
+
+TEST(ApplyCommand, EditDescriptionIsNoOpInCore)
+{
+    NodePool pool;
+    ViewState state;
+    state.cursor = pool.add_root();
+    ASSERT_TRUE(pool.set_description(state.cursor, "keep").has_value());
+    const auto vis = compute_visible(pool, state.folded);
+
+    ASSERT_TRUE(apply_command(Command{CmdEditDescription{}}, pool, state, vis).has_value());
+
+    EXPECT_EQ(pool.get_description(state.cursor).value(), std::string_view{"keep"});
+    EXPECT_EQ(state.mode, Mode::NORMAL);
+}
+
+TEST(EditorText, StripsExactlyOneTrailingNewline)
+{
+    EXPECT_EQ(normalize_editor_text("a\nb\n"), "a\nb");
+    EXPECT_EQ(normalize_editor_text("a\nb\n\n"), "a\nb\n");
+    EXPECT_EQ(normalize_editor_text("a\r\n"), "a");
+    EXPECT_EQ(normalize_editor_text("no newline"), "no newline");
+    EXPECT_EQ(normalize_editor_text("\n"), "");
+    EXPECT_EQ(normalize_editor_text(""), "");
+}
+
+TEST(EditorText, KeepsInnerBlankLines)
+{
+    EXPECT_EQ(normalize_editor_text("one\n\nthree\n"), "one\n\nthree");
+}
+
+TEST(Render, RowShowsMarkerOnlyWhenDescriptionPresent)
+{
+    NodePool pool;
+    const TaskId a = pool.add_root();
+    const TaskId b = pool.add_sibling_after(a).value();
+    ASSERT_TRUE(pool.set_title(a, "with notes"));
+    ASSERT_TRUE(pool.set_title(b, "plain"));
+    ASSERT_TRUE(pool.set_description(a, "details"));
+
+    ViewState state;
+    const auto vis = compute_visible(pool, state.folded);
+    ftxui::Screen screen(40, 2);
+    ftxui::Render(screen, render(pool, state, vis, 0));
+    const std::string out = screen.ToString();
+
+    const auto marker = out.find("✎");
+    ASSERT_NE(marker, std::string::npos);
+    EXPECT_EQ(out.find("✎", marker + 1), std::string::npos);  // only one row has it
+}
+
+TEST(Render, DetailsPaneShowsMultiLineDescriptionBesideList)
+{
+    NodePool pool;
+    ViewState state;
+    state.cursor = pool.add_root();
+    ASSERT_TRUE(pool.set_title(state.cursor, "Ship v2"));
+    ASSERT_TRUE(pool.set_description(state.cursor, "alpha line\n\nbeta line"));
+    state.show_details = true;
+    const auto vis = compute_visible(pool, state.folded);
+
+    ftxui::Screen screen(100, 8);
+    ftxui::Render(screen, render(pool, state, vis, 0, 100));
+    const std::string out = screen.ToString();
+
+    EXPECT_NE(out.find("alpha line"), std::string::npos);
+    EXPECT_NE(out.find("beta line"), std::string::npos);
+    EXPECT_NE(out.find("✎"), std::string::npos);
+    EXPECT_EQ(details_pane_rows(state, 100), 0);
+}
+
+TEST(Render, DetailsPaneStacksBelowOnNarrowTerminal)
+{
+    NodePool pool;
+    ViewState state;
+    state.cursor = pool.add_root();
+    ASSERT_TRUE(pool.set_title(state.cursor, "T"));
+    ASSERT_TRUE(pool.set_description(state.cursor, "narrow notes"));
+    state.show_details = true;
+    const auto vis = compute_visible(pool, state.folded);
+
+    ftxui::Screen screen(50, 14);
+    ftxui::Render(screen, render(pool, state, vis, 0, 50));
+
+    EXPECT_NE(screen.ToString().find("narrow notes"), std::string::npos);
+    EXPECT_EQ(details_pane_rows(state, 50), DETAILS_PANE_ROWS);
+}
+
+TEST(Render, DetailsPaneHintsWhenDescriptionEmpty)
+{
+    NodePool pool;
+    ViewState state;
+    state.cursor = pool.add_root();
+    state.show_details = true;
+    const auto vis = compute_visible(pool, state.folded);
+
+    ftxui::Screen screen(100, 6);
+    ftxui::Render(screen, render(pool, state, vis, 0, 100));
+
+    EXPECT_NE(screen.ToString().find("press e to add"), std::string::npos);
+}
+
+TEST(Render, DetailsPaneHiddenByDefault)
+{
+    NodePool pool;
+    ViewState state;
+    state.cursor = pool.add_root();
+    ASSERT_TRUE(pool.set_description(state.cursor, "secret notes"));
+    const auto vis = compute_visible(pool, state.folded);
+
+    ftxui::Screen screen(100, 4);
+    ftxui::Render(screen, render(pool, state, vis, 0, 100));
+
+    EXPECT_EQ(screen.ToString().find("secret notes"), std::string::npos);
 }
 
 }  // namespace toe::ui

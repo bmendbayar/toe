@@ -147,6 +147,25 @@ EventResult handle_normal(
         return {.consumed = true, .command = std::nullopt};
     }
 
+    // e - edit the description in $EDITOR (needs terminal I/O, so the app runs it)
+    if (event == ftxui::Event::e)
+    {
+        reset_d();
+        if (!state.cursor.is_valid())
+        {
+            return {.consumed = true, .command = std::nullopt};
+        }
+        return {.consumed = true, .command = Command{CmdEditDescription{}}};
+    }
+
+    // K - toggle the description detail pane
+    if (event == ftxui::Event::K)
+    {
+        reset_d();
+        state.show_details = !state.show_details;
+        return {.consumed = true, .command = std::nullopt};
+    }
+
     // o - open new sibling below
     if (event == ftxui::Event::o)
     {
@@ -711,7 +730,8 @@ std::expected<void, core::Error> apply_command(
                 return pool.set_due_date(state.cursor, *epoch);
             }
 
-            // CmdQuit, CmdForceQuit, CmdSave, CmdSaveAndQuit, CmdExport: no Core mutation; app handles them.
+            // CmdQuit, CmdForceQuit, CmdSave, CmdSaveAndQuit, CmdExport, CmdEditDescription: no Core
+            // mutation here; app handles them.
             return {};
         },
         cmd

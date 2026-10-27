@@ -59,6 +59,7 @@ struct ViewState
     DatePickerState picker;
     std::int64_t timeline_start_epoch = 0;  // first visible day in Timeline view
     std::size_t tree_scroll = 0;            // index into `visible` of the top row drawn in Tree view
+    bool show_details = false;              // 'K' toggles the description pane
 };
 
 }  // namespace toe::ui

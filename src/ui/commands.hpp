@@ -23,6 +23,7 @@ struct CmdForceQuit {};   // ':q!' — discard unsaved changes and quit
 struct CmdSave {};
 struct CmdSaveAndQuit {};
 struct CmdExport { std::string target; };   // ';export <target>' — copy cursor subtree to another file
+struct CmdEditDescription {};               // 'e' — edit cursor's description in $EDITOR (app-level)
 // clang-format on
 
 using Command = std::variant<
@@ -41,6 +42,7 @@ using Command = std::variant<
     CmdForceQuit,
     CmdSave,
     CmdSaveAndQuit,
-    CmdExport>;
+    CmdExport,
+    CmdEditDescription>;
 
 }  // namespace toe::ui
