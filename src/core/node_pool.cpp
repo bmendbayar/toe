@@ -19,6 +19,7 @@ NodePool::NodePool(const std::uint32_t reserve_slots)
     priority_.reserve(reserve_slots);
     due_date_.reserve(reserve_slots);
     title_.reserve(reserve_slots);
+    description_.reserve(reserve_slots);
 }
 
 TaskId NodePool::allocate()
@@ -39,6 +40,7 @@ TaskId NodePool::allocate()
         priority_[index] = Priority::LOW;
         due_date_[index] = NO_DUE_DATE;
         title_[index] = TextSlice{};
+        description_[index] = TextSlice{};
         return TaskId{.index = index, .generation = generation_[index]};
     }
 
@@ -52,6 +54,7 @@ TaskId NodePool::allocate()
     priority_.push_back(Priority::LOW);
     due_date_.push_back(NO_DUE_DATE);
     title_.push_back(TextSlice{});
+    description_.push_back(TextSlice{});
     return TaskId{.index = index, .generation = 1};
 }
 
@@ -376,6 +379,44 @@ NodePool::set_title(const TaskId id, const std::string_view title)
     return {};
 }
 
+std::expected<std::string_view, Error>
+NodePool::get_description(const TaskId id) const
+{
+    if (!is_valid(id))
+    {
+        return std::unexpected(Error::STALE_HANDLE);
+    }
+    const TextSlice &sl = description_[id.index];
+    if (sl.length == 0)
+    {
+        return std::string_view{};
+    }
+    return std::string_view{text_arena_.data() + sl.offset, sl.length};
+}
+
+std::expected<void, Error>
+NodePool::set_description(const TaskId id, const std::string_view desc)
+{
+    if (!is_valid(id))
+    {
+        return std::unexpected(Error::STALE_HANDLE);
+    }
+    if (desc.empty())
+    {
+        description_[id.index] = TextSlice{};
+        return {};
+    }
+    if (desc.size() > MAX_DESCRIPTION_BYTES)
+    {
+        return std::unexpected(Error::DESCRIPTION_TOO_LONG);
+    }
+    const auto offset = static_cast<std::uint32_t>(text_arena_.size());
+    const auto length = static_cast<std::uint32_t>(desc.size());
+    text_arena_.insert(text_arena_.end(), desc.begin(), desc.end());
+    description_[id.index] = TextSlice{.offset = offset, .length = length};
+    return {};
+}
+
 // --- Tree inspection --------------------------------------------------------
 
 std::expected<TaskId, Error> NodePool::parent(const TaskId id) const
@@ -558,11 +599,20 @@ std::expected<void, Error> copy_fields(const NodePool &src, TaskId from, NodePoo
     {
         return r;
     }
-    if (title->empty())
+    const auto description = src.get_description(from);
+    if (!description)
     {
-        return {};  // set_title rejects empty text; a fresh node is already empty
+        return std::unexpected(description.error());
     }
-    return dst.set_title(to, *title);
+    // set_title rejects empty text; a fresh node is already empty.
+    if (!title->empty())
+    {
+        if (auto r = dst.set_title(to, *title); !r)
+        {
+            return r;
+        }
+    }
+    return dst.set_description(to, *description);  // empty = no-op clear
 }
 
 }  // namespace

@@ -548,6 +548,24 @@ TEST(CopySubtree, CopiesFieldsAndPreservesChildOrder)
     EXPECT_EQ(dst.get_due_date(order[2]).value(), std::optional<std::int64_t>{86400});
 }
 
+TEST(CopySubtree, CopiesDescriptionsEvenWithoutTitle)
+{
+    NodePool src;
+    const TaskId root = src.add_root();
+    const TaskId kid = src.add_child(root).value();
+    ASSERT_TRUE(src.set_title(root, "root").has_value());
+    ASSERT_TRUE(src.set_description(root, "root notes\nmore").has_value());
+    ASSERT_TRUE(src.set_description(kid, "untitled child notes").has_value());  // no title
+
+    NodePool dst;
+    const auto copy = copy_subtree(src, root, dst);
+    ASSERT_TRUE(copy.has_value());
+    const TaskId dkid = dst.first_child(*copy).value();
+    EXPECT_EQ(dst.get_description(*copy).value(), std::string_view{"root notes\nmore"});
+    EXPECT_EQ(dst.get_description(dkid).value(), std::string_view{"untitled child notes"});
+    EXPECT_TRUE(dst.get_title(dkid).value().empty());
+}
+
 TEST(CopySubtree, CopiesOnlyTheChosenSubtreeAndLeavesSourceUntouched)
 {
     NodePool src;

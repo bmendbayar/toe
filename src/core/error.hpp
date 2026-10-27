@@ -35,6 +35,10 @@ enum class Error : std::uint8_t
     // The arena append is rejected so the old title (if any) is preserved.
     TITLE_TOO_LONG,
 
+    // set_description was called with text longer than MAX_DESCRIPTION_BYTES.
+    // The old description (if any) is preserved.
+    DESCRIPTION_TOO_LONG,
+
     // The serialized blob does not begin with the expected 4-byte magic. The
     // file is not a toe save (or its first bytes are clobbered).
     BAD_MAGIC,

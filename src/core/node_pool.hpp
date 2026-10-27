@@ -150,6 +150,16 @@ public:
     [[nodiscard]] std::expected<void, Error>
     set_title(TaskId id, std::string_view title);
 
+    // Long-form, possibly multi-line text explaining the task. Returns an empty
+    // string_view when unset. The view is invalidated by any set_title or
+    // set_description call on the pool (they share one arena).
+    [[nodiscard]] std::expected<std::string_view, Error>
+    get_description(TaskId id) const;
+    // Unlike titles, an empty `desc` clears the description.
+    // Rejects: StaleHandle, DescriptionTooLong.
+    [[nodiscard]] std::expected<void, Error>
+    set_description(TaskId id, std::string_view desc);
+
     // --- Tree inspection ----------------------------------------------------
 
     // Head of the root sibling chain, or an invalid handle for an empty forest.
@@ -218,11 +228,13 @@ private:
     std::vector<Status> status_;          // default: Status::Todo
     std::vector<Priority> priority_;      // default: Priority::Low
     std::vector<std::int64_t> due_date_;  // default: kNoDueDate (no date set)
-    std::vector<TextSlice> title_;         // default: {0, 0} (no title)
+    std::vector<TextSlice> title_;        // default: {0, 0} (no title)
+    std::vector<TextSlice> description_;  // default: {0, 0} (no description)
 
-    // Append-only character buffer backing all title strings. Edits
-    // orphan old bytes and append new ones; compaction happens at save time.
-    // ALLOC: one growable buffer for all titles, amortised push_back.
+    // Append-only character buffer backing all title and description strings.
+    // Edits orphan old bytes and append new ones; compaction happens at save
+    // time.
+    // ALLOC: one growable buffer for all text, amortised push_back.
     std::vector<char> text_arena_;
 
     // Head of the root sibling chain; invalid when the forest is empty.

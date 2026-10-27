@@ -24,7 +24,11 @@ namespace
 // Format constants. The magic doubles as a version tag's neighbour: bump
 // kVersion (and add a migration path) whenever the layout below changes.
 constexpr char MAGIC[4] = {'T', 'O', 'E', '1'};
-constexpr std::uint32_t VERSION = 1;
+constexpr std::uint32_t VERSION = 2;
+
+// v1 files predate descriptions: same layout minus the description array.
+// They are still readable; every task loads with an empty description.
+constexpr std::uint32_t VERSION_NO_DESCRIPTION = 1;
 
 // Header: magic(4) + version(4) + slot_count(4) + free_head(4) + root_index(4)
 // + root_generation(4) + live_count(8) + arena_size(8).
@@ -32,8 +36,8 @@ constexpr std::size_t HEADER_BYTES = 40;
 
 // Per-slot on-disk footprint, summed across every parallel array:
 // generation(4) + next_free(4) + parent(8) + first_child(8) + next_sibling(8)
-// + status(1) + priority(1) + due_date(8) + title(8).
-constexpr std::size_t PER_SLOT_BYTES = 50;
+// + status(1) + priority(1) + due_date(8) + title(8) + description(8).
+constexpr std::size_t PER_SLOT_BYTES = 58;
 
 // --- Writing ----------------------------------------------------------------
 
@@ -140,7 +144,19 @@ std::vector<std::byte> serialize(const NodePool &pool)
     // fresh arena (rewriting its offset), and blank out every freed slot so the
     // reader's live-slot validation never trips over leftover links.
     std::vector<char> arena;
+    // Copy a slice's bytes into the compacted arena, returning its new location.
+    const auto compact = [&](const TextSlice &sl) {
+        if (sl.length == 0)
+        {
+            return TextSlice{};
+        }
+        const auto offset = static_cast<std::uint32_t>(arena.size());
+        const auto *begin = pool.text_arena_.data() + sl.offset;
+        arena.insert(arena.end(), begin, begin + sl.length);
+        return TextSlice{.offset = offset, .length = sl.length};
+    };
     std::vector<TextSlice> title(slot_count);
+    std::vector<TextSlice> description(slot_count);
     std::vector<TaskId> parent(slot_count);
     std::vector<TaskId> first_child(slot_count);
     std::vector<TaskId> next_sibling(slot_count);
@@ -154,15 +170,8 @@ std::vector<std::byte> serialize(const NodePool &pool)
         first_child[i] = pool.first_child_[i];
         next_sibling[i] = pool.next_sibling_[i];
 
-        const TextSlice &sl = pool.title_[i];
-        if (sl.length == 0)
-        {
-            continue;
-        }
-        const auto offset = static_cast<std::uint32_t>(arena.size());
-        const auto *begin = pool.text_arena_.data() + sl.offset;
-        arena.insert(arena.end(), begin, begin + sl.length);
-        title[i] = TextSlice{.offset = offset, .length = sl.length};
+        title[i] = compact(pool.title_[i]);
+        description[i] = compact(pool.description_[i]);
     }
 
     std::vector<std::byte> out;
@@ -186,6 +195,7 @@ std::vector<std::byte> serialize(const NodePool &pool)
     put_array(out, pool.priority_);
     put_array(out, pool.due_date_);
     put_array(out, title);
+    put_array(out, description);
     append_bytes(out, arena.data(), arena.size());
 
     return out;
@@ -210,7 +220,7 @@ std::expected<NodePool, Error> deserialize(const std::span<const std::byte> byte
     {
         return std::unexpected(e.error());
     }
-    if (version != VERSION)
+    if (version != VERSION && version != VERSION_NO_DESCRIPTION)
     {
         return std::unexpected(Error::UNSUPPORTED_VERSION);
     }
@@ -237,6 +247,7 @@ std::expected<NodePool, Error> deserialize(const std::span<const std::byte> byte
     std::vector<Priority> priority;
     std::vector<std::int64_t> due_date;
     std::vector<TextSlice> title;
+    std::vector<TextSlice> description;
     std::vector<char> arena;
     if (const auto e = r.read_array(generation, slot_count); !e) return std::unexpected(e.error());
     if (const auto e = r.read_array(next_free, slot_count); !e) return std::unexpected(e.error());
@@ -247,6 +258,14 @@ std::expected<NodePool, Error> deserialize(const std::span<const std::byte> byte
     if (const auto e = r.read_array(priority, slot_count); !e) return std::unexpected(e.error());
     if (const auto e = r.read_array(due_date, slot_count); !e) return std::unexpected(e.error());
     if (const auto e = r.read_array(title, slot_count); !e) return std::unexpected(e.error());
+    if (version == VERSION)
+    {
+        if (const auto e = r.read_array(description, slot_count); !e) return std::unexpected(e.error());
+    }
+    else
+    {
+        description.assign(slot_count, TextSlice{});
+    }
     if (const auto e = r.read_array(arena, static_cast<std::size_t>(arena_size)); !e)
     {
         return std::unexpected(e.error());
@@ -317,11 +336,12 @@ std::expected<NodePool, Error> deserialize(const std::span<const std::byte> byte
         {
             return std::unexpected(Error::CORRUPT_DATA);
         }
-        if (const TextSlice &sl = title[i];
-            sl.length != 0 &&
-            (sl.offset > arena_size || sl.length > arena_size - sl.offset))
+        for (const TextSlice &sl : {title[i], description[i]})
         {
-            return std::unexpected(Error::CORRUPT_DATA);
+            if (sl.length != 0 && (sl.offset > arena_size || sl.length > arena_size - sl.offset))
+            {
+                return std::unexpected(Error::CORRUPT_DATA);
+            }
         }
         if (static_cast<std::uint8_t>(status[i]) > static_cast<std::uint8_t>(Status::DONE) ||
             static_cast<std::uint8_t>(priority[i]) > static_cast<std::uint8_t>(Priority::HIGH))
@@ -340,6 +360,7 @@ std::expected<NodePool, Error> deserialize(const std::span<const std::byte> byte
     pool.priority_ = std::move(priority);
     pool.due_date_ = std::move(due_date);
     pool.title_ = std::move(title);
+    pool.description_ = std::move(description);
     pool.text_arena_ = std::move(arena);
     pool.root_ = root.is_valid() ? root : TaskId::invalid();
     pool.free_head_ = free_head;

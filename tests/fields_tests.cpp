@@ -359,4 +359,82 @@ TEST(Fields, FreedSlotFieldsResetOnReuse)
     EXPECT_TRUE(pool.get_title(reused).value().empty());
 }
 
+TEST(Fields, DefaultDescriptionIsEmpty)
+{
+    NodePool pool;
+    const TaskId id = pool.add_root();
+    ASSERT_TRUE(pool.get_description(id).has_value());
+    EXPECT_TRUE(pool.get_description(id).value().empty());
+}
+
+TEST(Fields, SetAndGetDescriptionKeepsNewlines)
+{
+    NodePool pool;
+    const TaskId id = pool.add_root();
+    const std::string text = "first line\n\n  indented second\nlast";
+    ASSERT_TRUE(pool.set_description(id, text).has_value());
+    EXPECT_EQ(pool.get_description(id).value(), text);
+}
+
+TEST(Fields, DescriptionAndTitleAreIndependent)
+{
+    NodePool pool;
+    const TaskId id = pool.add_root();
+    ASSERT_TRUE(pool.set_title(id, "title").has_value());
+    ASSERT_TRUE(pool.set_description(id, "desc").has_value());
+    ASSERT_TRUE(pool.set_title(id, "new title").has_value());
+    EXPECT_EQ(pool.get_title(id).value(), std::string_view{"new title"});
+    EXPECT_EQ(pool.get_description(id).value(), std::string_view{"desc"});
+}
+
+TEST(Fields, SetDescriptionEmptyClears)
+{
+    NodePool pool;
+    const TaskId id = pool.add_root();
+    ASSERT_TRUE(pool.set_description(id, "something").has_value());
+    ASSERT_TRUE(pool.set_description(id, "").has_value());
+    EXPECT_TRUE(pool.get_description(id).value().empty());
+}
+
+TEST(Fields, SetDescriptionRejectsTooLongAndKeepsOld)
+{
+    NodePool pool;
+    const TaskId id = pool.add_root();
+    ASSERT_TRUE(pool.set_description(id, "keep me").has_value());
+    const std::string big(MAX_DESCRIPTION_BYTES + 1, 'x');
+    const auto r = pool.set_description(id, big);
+    ASSERT_FALSE(r.has_value());
+    EXPECT_EQ(r.error(), Error::DESCRIPTION_TOO_LONG);
+    EXPECT_EQ(pool.get_description(id).value(), std::string_view{"keep me"});
+}
+
+TEST(Fields, SetDescriptionAtExactLimitSucceeds)
+{
+    NodePool pool;
+    const TaskId id = pool.add_root();
+    const std::string max(MAX_DESCRIPTION_BYTES, 'x');
+    ASSERT_TRUE(pool.set_description(id, max).has_value());
+    EXPECT_EQ(pool.get_description(id).value().size(), max.size());
+}
+
+TEST(Fields, DescriptionAccessorsRejectStaleHandle)
+{
+    NodePool pool;
+    const TaskId id = pool.add_root();
+    ASSERT_TRUE(pool.remove_subtree(id).has_value());
+    EXPECT_EQ(pool.get_description(id).error(), Error::STALE_HANDLE);
+    EXPECT_EQ(pool.set_description(id, "x").error(), Error::STALE_HANDLE);
+}
+
+TEST(Fields, ReusedSlotHasNoDescription)
+{
+    NodePool pool;
+    const TaskId id = pool.add_root();
+    ASSERT_TRUE(pool.set_description(id, "stale text").has_value());
+    ASSERT_TRUE(pool.remove_subtree(id).has_value());
+    const TaskId reused = pool.add_root();
+    ASSERT_EQ(reused.index, id.index);
+    EXPECT_TRUE(pool.get_description(reused).value().empty());
+}
+
 }  // namespace toe::core

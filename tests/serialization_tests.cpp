@@ -51,6 +51,7 @@ void expect_equivalent(const NodePool &a, const NodePool &b)
         EXPECT_EQ(a.get_priority(id).value(), b.get_priority(id).value());
         EXPECT_EQ(a.get_due_date(id).value(), b.get_due_date(id).value());
         EXPECT_EQ(a.get_title(id).value(), b.get_title(id).value());
+        EXPECT_EQ(a.get_description(id).value(), b.get_description(id).value());
         EXPECT_EQ(a.parent(id).value(), b.parent(id).value());
         EXPECT_EQ(a.first_child(id).value(), b.first_child(id).value());
         EXPECT_EQ(a.next_sibling(id).value(), b.next_sibling(id).value());
@@ -150,9 +151,9 @@ TEST(Serialization, CompactsOrphanedTitleBytes)
     ASSERT_TRUE(pool.set_title(id, "short").has_value());
 
     const std::vector<std::byte> bytes = serialize(pool);
-    // One slot: arena follows 40-byte header + 50 bytes of slot arrays. The
+    // One slot: arena follows 40-byte header + 58 bytes of slot arrays. The
     // compacted arena must hold only the surviving 5-byte title.
-    ASSERT_EQ(bytes.size(), 40u + 50u + 5u);
+    ASSERT_EQ(bytes.size(), 40u + 58u + 5u);
 
     const auto loaded = deserialize(bytes);
     ASSERT_TRUE(loaded.has_value());
@@ -290,6 +291,80 @@ TEST(Serialization, RejectsCorruptTitleOffset)
     const auto loaded = deserialize(bytes);
     ASSERT_FALSE(loaded.has_value());
     EXPECT_EQ(loaded.error(), Error::CORRUPT_DATA);
+}
+
+TEST(Serialization, RoundTripPreservesDescriptions)
+{
+    NodePool pool;
+    const TaskId a = pool.add_root();
+    const TaskId b = pool.add_child(a).value();
+    ASSERT_TRUE(pool.set_title(a, "title a").has_value());
+    ASSERT_TRUE(pool.set_description(a, "line one\n\nline three").has_value());
+    ASSERT_TRUE(pool.set_description(a, "rewritten\nmulti-line").has_value());  // orphans bytes
+    ASSERT_TRUE(pool.set_title(b, "title b").has_value());  // no description
+
+    const auto loaded = deserialize(serialize(pool));
+    ASSERT_TRUE(loaded.has_value());
+    EXPECT_EQ(loaded->get_description(a).value(), std::string_view{"rewritten\nmulti-line"});
+    EXPECT_TRUE(loaded->get_description(b).value().empty());
+    expect_equivalent(pool, loaded.value());
+}
+
+TEST(Serialization, RejectsCorruptDescriptionOffset)
+{
+    NodePool pool;
+    const TaskId a = pool.add_root();            // slot 0
+    const TaskId b = pool.add_child(a).value();  // slot 1
+    ASSERT_TRUE(pool.set_description(b, "x").has_value());
+    std::vector<std::byte> bytes = serialize(pool);
+
+    // description array follows title: kOffArrays + 50*slot_count.
+    constexpr std::size_t slot_count = 2;
+    const std::size_t desc_base = kOffArrays + (50 * slot_count);
+    poke_u32(bytes, desc_base + (1 * 8), 0xFFFF'FFF0);  // points past the arena
+
+    const auto loaded = deserialize(bytes);
+    ASSERT_FALSE(loaded.has_value());
+    EXPECT_EQ(loaded.error(), Error::CORRUPT_DATA);
+}
+
+TEST(Serialization, LoadsVersion1FileWithEmptyDescriptions)
+{
+    NodePool pool;
+    const TaskId a = pool.add_root();
+    const TaskId b = pool.add_child(a).value();
+    ASSERT_TRUE(pool.set_title(a, "old task").has_value());
+    ASSERT_TRUE(pool.set_title(b, "child").has_value());
+    std::vector<std::byte> bytes = serialize(pool);
+
+    // Down-convert to the v1 layout: version word = 1 and no description array
+    // (8 bytes per slot, between the title array and the arena).
+    constexpr std::size_t slot_count = 2;
+    const std::size_t desc_base = kOffArrays + (50 * slot_count);
+    poke_u32(bytes, kOffVersion, 1);
+    bytes.erase(
+        bytes.begin() + static_cast<std::ptrdiff_t>(desc_base),
+        bytes.begin() + static_cast<std::ptrdiff_t>(desc_base + 8 * slot_count)
+    );
+
+    const auto loaded = deserialize(bytes);
+    ASSERT_TRUE(loaded.has_value());
+    EXPECT_EQ(loaded->get_title(a).value(), std::string_view{"old task"});
+    EXPECT_EQ(loaded->get_title(b).value(), std::string_view{"child"});
+    EXPECT_TRUE(loaded->get_description(a).value().empty());
+    EXPECT_TRUE(loaded->get_description(b).value().empty());
+}
+
+TEST(Serialization, RejectsVersion3)
+{
+    NodePool pool;
+    (void)pool.add_root();
+    std::vector<std::byte> bytes = serialize(pool);
+    poke_u32(bytes, kOffVersion, 3);
+
+    const auto loaded = deserialize(bytes);
+    ASSERT_FALSE(loaded.has_value());
+    EXPECT_EQ(loaded.error(), Error::UNSUPPORTED_VERSION);
 }
 
 // --- Filesystem -------------------------------------------------------------

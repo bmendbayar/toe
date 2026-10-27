@@ -69,6 +69,10 @@ static_assert(std::is_standard_layout_v<TextSlice>);
 // this are rejected with Error::TitleTooLong.
 inline constexpr std::uint32_t MAX_TITLE_BYTES = 4096;
 
+// Maximum byte length accepted by set_description (multi-line, free-form).
+// Longer text is rejected with Error::DESCRIPTION_TOO_LONG.
+inline constexpr std::uint32_t MAX_DESCRIPTION_BYTES = 65536;
+
 // Sentinel stored in the due_date parallel array to represent "no date set".
 // INT64_MIN is chosen because it cannot be a valid Unix epoch value in any
 // realistic task-manager context.
