@@ -1,22 +1,22 @@
+#include <sys/wait.h>
+#include <unistd.h>
+
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
-#include <iterator>
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/color.hpp>
 #include <ftxui/screen/terminal.hpp>
+#include <iterator>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <variant>
-
-#include <sys/wait.h>
-#include <unistd.h>
 
 #include "core/error.hpp"
 #include "core/node_pool.hpp"
@@ -25,8 +25,8 @@
 #include "ui/editor_text.hpp"
 #include "ui/key_handler.hpp"
 #include "ui/renderer.hpp"
-#include "ui/view_state.hpp"
 #include "ui/scroll.hpp"
+#include "ui/view_state.hpp"
 
 namespace
 {
@@ -199,9 +199,9 @@ std::string edit_description(
 
     const char *visual = std::getenv("VISUAL");
     const char *editor_env = std::getenv("EDITOR");
-    const std::string editor = (visual != nullptr && *visual != '\0') ? visual
+    const std::string editor = (visual != nullptr && *visual != '\0')           ? visual
                                : (editor_env != nullptr && *editor_env != '\0') ? editor_env
-                                                                                 : "vi";
+                                                                                : "vim";
     const std::string command = editor + " " + shell_quote(tmp.string());
 
     int rc = -1;

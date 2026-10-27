@@ -13,6 +13,7 @@
 #include "ui/date_util.hpp"
 #include "ui/renderer.hpp"
 #include "ui/timeline.hpp"
+#include "ui/utf8.hpp"
 
 namespace toe::ui
 {
@@ -559,6 +560,26 @@ ftxui::Element render(
     });
 }
 
+// edit_buffer with the cursor drawn in place: the character under it inverted,
+// or a blinking block when it sits at the end.
+[[nodiscard]] ftxui::Element render_edit_line(const ViewState &state)
+{
+    using namespace ftxui;
+
+    const std::string_view buf = state.edit_buffer;
+    const std::size_t cur = std::min(state.edit_cursor, buf.size());
+    if (cur >= buf.size())
+    {
+        return hbox({text(std::string(buf)), text("█") | blink});
+    }
+    const std::size_t next = next_boundary(buf, cur);
+    return hbox({
+        text(std::string(buf.substr(0, cur))),
+        text(std::string(buf.substr(cur, next - cur))) | inverted,
+        text(std::string(buf.substr(next))),
+    });
+}
+
 ftxui::Element render_status_bar(const ViewState &state)
 {
     using namespace ftxui;
@@ -573,15 +594,13 @@ ftxui::Element render_status_bar(const ViewState &state)
                 return hbox(
                     {text(" DATE   ") | bold | color(Color::Cyan),
                      text("  YYYY-MM-DD  "),
-                     text(state.edit_buffer),
-                     text("█") | blink}
+                     render_edit_line(state)}
                 );
             }
             return hbox(
                 {text(" INSERT ") | bold | color(Color::BlueLight),
                  text("  "),
-                 text(state.edit_buffer),
-                 text("█") | blink}
+                 render_edit_line(state)}
             );
         case Mode::COMMAND:
             return hbox({text(":"), text(state.cmd_buffer), text("█") | blink});

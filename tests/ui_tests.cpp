@@ -82,7 +82,7 @@ TEST(ComputeVisible, UnfoldedNodeShowsDescendants)
 
 // --- Mode transitions ----------------------------------------------------------
 
-TEST(ModeTransition, NormalI_EntersInsert)
+TEST(ModeTransition, NormalI_EmitsCmdBeginEditTitle_AtEnd)
 {
     NodePool pool;
     const TaskId root = pool.add_root();
@@ -93,8 +93,39 @@ TEST(ModeTransition, NormalI_EntersInsert)
     const auto result = process_event(state, vis, ftxui::Event::i);
 
     EXPECT_TRUE(result.consumed);
-    EXPECT_FALSE(result.command.has_value());
-    EXPECT_EQ(state.mode, Mode::INSERT);
+    ASSERT_TRUE(result.command.has_value());
+    const auto *cmd = std::get_if<CmdBeginEditTitle>(&*result.command);
+    ASSERT_NE(cmd, nullptr);
+    EXPECT_TRUE(cmd->cursor_at_end);
+    EXPECT_EQ(state.mode, Mode::NORMAL);  // mode flips when the command is applied
+}
+
+TEST(ModeTransition, NormalA_EmitsCmdBeginEditTitle_AtEnd)
+{
+    NodePool pool;
+    ViewState state;
+    const auto vis = compute_visible(pool, state.folded);
+
+    const auto result = process_event(state, vis, ftxui::Event::a);
+
+    ASSERT_TRUE(result.command.has_value());
+    const auto *cmd = std::get_if<CmdBeginEditTitle>(&*result.command);
+    ASSERT_NE(cmd, nullptr);
+    EXPECT_TRUE(cmd->cursor_at_end);
+}
+
+TEST(ModeTransition, NormalShiftI_EmitsCmdBeginEditTitle_AtStart)
+{
+    NodePool pool;
+    ViewState state;
+    const auto vis = compute_visible(pool, state.folded);
+
+    const auto result = process_event(state, vis, ftxui::Event::I);
+
+    ASSERT_TRUE(result.command.has_value());
+    const auto *cmd = std::get_if<CmdBeginEditTitle>(&*result.command);
+    ASSERT_NE(cmd, nullptr);
+    EXPECT_FALSE(cmd->cursor_at_end);
 }
 
 TEST(ModeTransition, InsertEsc_ReturnsNormal)
@@ -435,11 +466,13 @@ TEST(InsertMode, Backspace_PopsLastChar)
     ViewState state;
     state.mode = Mode::INSERT;
     state.edit_buffer = "abc";
+    state.edit_cursor = 3;
     const auto vis = compute_visible(pool, state.folded);
 
     (void)process_event(state, vis, ftxui::Event::Backspace);
 
     EXPECT_EQ(state.edit_buffer, "ab");
+    EXPECT_EQ(state.edit_cursor, 2u);
 }
 
 TEST(InsertMode, Return_EmitsCmdCommitTitle_AndReturnToNormal)
@@ -1568,6 +1601,213 @@ TEST(Render, DetailsPaneHiddenByDefault)
     ftxui::Render(screen, render(pool, state, vis, 0, 100));
 
     EXPECT_EQ(screen.ToString().find("secret notes"), std::string::npos);
+}
+
+// --- title editing with a cursor ------------------------------------------------
+
+namespace
+{
+ViewState insert_state(const std::string &buf, std::size_t cursor)
+{
+    ViewState state;
+    state.mode = Mode::INSERT;
+    state.edit_buffer = buf;
+    state.edit_cursor = cursor;
+    return state;
+}
+}  // namespace
+
+TEST(ApplyCommand, BeginEditTitle_PrefillsTitleCursorAtEnd)
+{
+    NodePool pool;
+    ViewState state;
+    state.cursor = pool.add_root();
+    ASSERT_TRUE(pool.set_title(state.cursor, "Ship v2"));
+    const auto vis = compute_visible(pool, state.folded);
+
+    ASSERT_TRUE(apply_command(Command{CmdBeginEditTitle{.cursor_at_end = true}}, pool, state, vis));
+
+    EXPECT_EQ(state.mode, Mode::INSERT);
+    EXPECT_EQ(state.edit_field, EditField::TITLE);
+    EXPECT_EQ(state.edit_buffer, "Ship v2");
+    EXPECT_EQ(state.edit_cursor, 7u);
+}
+
+TEST(ApplyCommand, BeginEditTitle_CursorAtStart)
+{
+    NodePool pool;
+    ViewState state;
+    state.cursor = pool.add_root();
+    ASSERT_TRUE(pool.set_title(state.cursor, "Ship v2"));
+    const auto vis = compute_visible(pool, state.folded);
+
+    ASSERT_TRUE(apply_command(Command{CmdBeginEditTitle{.cursor_at_end = false}}, pool, state, vis));
+
+    EXPECT_EQ(state.edit_buffer, "Ship v2");
+    EXPECT_EQ(state.edit_cursor, 0u);
+}
+
+TEST(ApplyCommand, BeginEditTitle_WithoutCursorStaysNormal)
+{
+    NodePool pool;
+    ViewState state;
+    const auto vis = compute_visible(pool, state.folded);
+
+    ASSERT_TRUE(apply_command(Command{CmdBeginEditTitle{}}, pool, state, vis));
+
+    EXPECT_EQ(state.mode, Mode::NORMAL);
+}
+
+TEST(InsertMode, ArrowsStepOverWholeMultibyteChar)
+{
+    NodePool pool;
+    ViewState state = insert_state("añb", 4);  // end: a(1) ñ(2) b(1)
+    const auto vis = compute_visible(pool, state.folded);
+
+    (void)process_event(state, vis, ftxui::Event::ArrowLeft);
+    EXPECT_EQ(state.edit_cursor, 3u);
+    (void)process_event(state, vis, ftxui::Event::ArrowLeft);
+    EXPECT_EQ(state.edit_cursor, 1u);  // skipped both bytes of ñ
+    (void)process_event(state, vis, ftxui::Event::ArrowLeft);
+    EXPECT_EQ(state.edit_cursor, 0u);
+    (void)process_event(state, vis, ftxui::Event::ArrowLeft);
+    EXPECT_EQ(state.edit_cursor, 0u);  // clamps at start
+
+    (void)process_event(state, vis, ftxui::Event::ArrowRight);
+    (void)process_event(state, vis, ftxui::Event::ArrowRight);
+    EXPECT_EQ(state.edit_cursor, 3u);
+    (void)process_event(state, vis, ftxui::Event::ArrowRight);
+    (void)process_event(state, vis, ftxui::Event::ArrowRight);
+    EXPECT_EQ(state.edit_cursor, 4u);  // clamps at end
+}
+
+TEST(InsertMode, TypingInsertsAtCursor)
+{
+    NodePool pool;
+    ViewState state = insert_state("helo", 3);
+    const auto vis = compute_visible(pool, state.folded);
+
+    (void)process_event(state, vis, ftxui::Event::Character('l'));
+
+    EXPECT_EQ(state.edit_buffer, "hello");
+    EXPECT_EQ(state.edit_cursor, 4u);
+}
+
+TEST(InsertMode, BackspaceAndDeleteRemoveWholeMultibyteChar)
+{
+    NodePool pool;
+    const auto vis = compute_visible(pool, FoldSet{});
+
+    ViewState bs = insert_state("añb", 3);  // just after ñ
+    (void)process_event(bs, vis, ftxui::Event::Backspace);
+    EXPECT_EQ(bs.edit_buffer, "ab");
+    EXPECT_EQ(bs.edit_cursor, 1u);
+
+    ViewState del = insert_state("añb", 1);  // just before ñ
+    (void)process_event(del, vis, ftxui::Event::Delete);
+    EXPECT_EQ(del.edit_buffer, "ab");
+    EXPECT_EQ(del.edit_cursor, 1u);
+
+    ViewState at_start = insert_state("ab", 0);
+    (void)process_event(at_start, vis, ftxui::Event::Backspace);
+    EXPECT_EQ(at_start.edit_buffer, "ab");
+
+    ViewState at_end = insert_state("ab", 2);
+    (void)process_event(at_end, vis, ftxui::Event::Delete);
+    EXPECT_EQ(at_end.edit_buffer, "ab");
+}
+
+TEST(InsertMode, HomeAndEndJump)
+{
+    NodePool pool;
+    ViewState state = insert_state("abc", 1);
+    const auto vis = compute_visible(pool, state.folded);
+
+    (void)process_event(state, vis, ftxui::Event::End);
+    EXPECT_EQ(state.edit_cursor, 3u);
+    (void)process_event(state, vis, ftxui::Event::Home);
+    EXPECT_EQ(state.edit_cursor, 0u);
+}
+
+TEST(InsertMode, EditExistingTitleEndToEnd)
+{
+    NodePool pool;
+    ViewState state;
+    state.cursor = pool.add_root();
+    ASSERT_TRUE(pool.set_title(state.cursor, "helo"));
+    auto vis = compute_visible(pool, state.folded);
+
+    auto result = process_event(state, vis, ftxui::Event::i);
+    ASSERT_TRUE(result.command.has_value());
+    ASSERT_TRUE(apply_command(*result.command, pool, state, vis));
+    (void)process_event(state, vis, ftxui::Event::ArrowLeft);
+    (void)process_event(state, vis, ftxui::Event::Character('l'));
+    result = process_event(state, vis, ftxui::Event::Return);
+    ASSERT_TRUE(result.command.has_value());
+    ASSERT_TRUE(apply_command(*result.command, pool, state, vis));
+
+    EXPECT_EQ(pool.get_title(state.cursor).value(), std::string_view{"hello"});
+    EXPECT_EQ(state.mode, Mode::NORMAL);
+    EXPECT_EQ(state.edit_cursor, 0u);
+}
+
+TEST(InsertMode, EscLeavesTitleUnchanged)
+{
+    NodePool pool;
+    ViewState state;
+    state.cursor = pool.add_root();
+    ASSERT_TRUE(pool.set_title(state.cursor, "keep"));
+    auto vis = compute_visible(pool, state.folded);
+
+    auto result = process_event(state, vis, ftxui::Event::i);
+    ASSERT_TRUE(apply_command(*result.command, pool, state, vis));
+    (void)process_event(state, vis, ftxui::Event::Character('x'));
+    (void)process_event(state, vis, ftxui::Event::Escape);
+
+    EXPECT_EQ(pool.get_title(state.cursor).value(), std::string_view{"keep"});
+    EXPECT_EQ(state.mode, Mode::NORMAL);
+}
+
+TEST(NewTask, OStartsWithEmptyBufferAndCursorZero)
+{
+    NodePool pool;
+    ViewState state;
+    state.cursor = pool.add_root();
+    state.edit_buffer = "stale";
+    state.edit_cursor = 5;
+    auto vis = compute_visible(pool, state.folded);
+
+    ASSERT_TRUE(apply_command(Command{CmdAddSiblingBelow{}}, pool, state, vis));
+
+    EXPECT_EQ(state.mode, Mode::INSERT);
+    EXPECT_TRUE(state.edit_buffer.empty());
+    EXPECT_EQ(state.edit_cursor, 0u);
+}
+
+TEST(Render, StatusBarShowsTextOnBothSidesOfCursor)
+{
+    ViewState state = insert_state("abXYcd", 3);
+    ftxui::Screen screen(30, 1);
+    ftxui::Render(screen, render_status_bar(state));
+    // The character under the cursor is styled, so the three parts are separate runs.
+    const std::string out = screen.ToString();
+    EXPECT_NE(out.find("abX"), std::string::npos);
+    EXPECT_NE(out.find("Y"), std::string::npos);
+    EXPECT_NE(out.find("cd"), std::string::npos);
+    EXPECT_EQ(out.find("abXYcd"), std::string::npos);
+}
+
+TEST(DatePickerMode, I_PlacesCursorAtEndOfPrefill)
+{
+    NodePool pool;
+    ViewState state;
+    state.mode = Mode::DATE_PICKER;
+    state.picker.view_epoch = 0;
+    const auto vis = compute_visible(pool, state.folded);
+
+    (void)process_event(state, vis, ftxui::Event::i);
+
+    EXPECT_EQ(state.edit_cursor, state.edit_buffer.size());
 }
 
 }  // namespace toe::ui

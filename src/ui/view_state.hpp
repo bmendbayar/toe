@@ -54,6 +54,7 @@ struct ViewState
     core::TaskId cursor;                            // focused task; invalid() = no focus
     FoldSet folded;                                 // roots of collapsed subtrees
     std::string edit_buffer;                        // accumulator in Insert mode
+    std::size_t edit_cursor = 0;                    // byte offset into edit_buffer (on a UTF-8 boundary)
     std::string cmd_buffer;                         // accumulator in Command mode
     bool pending_d = false;                         // 'd' pressed once; second 'd' fires CmdDeleteTask
     DatePickerState picker;

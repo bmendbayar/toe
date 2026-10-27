@@ -15,6 +15,7 @@ struct CmdDeleteTask {};        // 'dd'
 struct CmdToggleDone {};        // 'x' toggle Done <-> Todo
 struct CmdCyclePriority {};     // 'p'
 struct CmdCycleStatus {};       // 's'
+struct CmdBeginEditTitle { bool cursor_at_end = true; };  // 'i'/'a' (end) or 'I' (start) — edit existing title
 struct CmdCommitTitle { std::string text; };
 struct CmdBeginDatePicker {};                 // 'D' — open calendar date picker
 struct CmdCommitDueDate { std::string text; };  // Return in Insert/DueDate; empty = clear
@@ -35,6 +36,7 @@ using Command = std::variant<
     CmdToggleDone,
     CmdCyclePriority,
     CmdCycleStatus,
+    CmdBeginEditTitle,
     CmdCommitTitle,
     CmdBeginDatePicker,
     CmdCommitDueDate,

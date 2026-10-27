@@ -4,6 +4,7 @@
 #include "core/fields.hpp"
 #include "ui/date_util.hpp"
 #include "ui/key_handler.hpp"
+#include "ui/utf8.hpp"
 
 namespace toe::ui
 {
@@ -137,14 +138,17 @@ EventResult handle_normal(
         return {.consumed = true, .command = std::nullopt};
     }
 
-    // i - enter Insert mode to edit title
-    if (event == ftxui::Event::i)
+    // i / a - edit the existing title, cursor at the end; I - cursor at the start.
+    // The title lives in the pool, so apply_command seeds the buffer.
+    if (event == ftxui::Event::i || event == ftxui::Event::a)
     {
         reset_d();
-        state.mode = Mode::INSERT;
-        state.edit_field = EditField::TITLE;
-        state.edit_buffer.clear();
-        return {.consumed = true, .command = std::nullopt};
+        return {.consumed = true, .command = Command{CmdBeginEditTitle{.cursor_at_end = true}}};
+    }
+    if (event == ftxui::Event::I)
+    {
+        reset_d();
+        return {.consumed = true, .command = Command{CmdBeginEditTitle{.cursor_at_end = false}}};
     }
 
     // e - edit the description in $EDITOR (needs terminal I/O, so the app runs it)
@@ -301,6 +305,7 @@ EventResult handle_insert(ViewState &state, const ftxui::Event &event)
         state.mode = Mode::NORMAL;
         state.edit_field = EditField::TITLE;
         state.edit_buffer.clear();
+        state.edit_cursor = 0;
         return {.consumed = true, .command = std::nullopt};
     }
 
@@ -308,6 +313,7 @@ EventResult handle_insert(ViewState &state, const ftxui::Event &event)
     {
         std::string text = std::move(state.edit_buffer);
         state.edit_buffer.clear();
+        state.edit_cursor = 0;
         state.mode = Mode::NORMAL;
         const EditField field = state.edit_field;
         state.edit_field = EditField::TITLE;
@@ -318,18 +324,52 @@ EventResult handle_insert(ViewState &state, const ftxui::Event &event)
         return {.consumed = true, .command = Command{CmdCommitTitle{.text = std::move(text)}}};
     }
 
+    std::string &buf = state.edit_buffer;
+    state.edit_cursor = std::min(state.edit_cursor, buf.size());
+
     if (event == ftxui::Event::Backspace)
     {
-        if (!state.edit_buffer.empty())
-        {
-            state.edit_buffer.pop_back();
-        }
+        const std::size_t from = prev_boundary(buf, state.edit_cursor);
+        buf.erase(from, state.edit_cursor - from);
+        state.edit_cursor = from;
+        return {.consumed = true, .command = std::nullopt};
+    }
+
+    if (event == ftxui::Event::Delete)
+    {
+        buf.erase(state.edit_cursor, next_boundary(buf, state.edit_cursor) - state.edit_cursor);
+        return {.consumed = true, .command = std::nullopt};
+    }
+
+    if (event == ftxui::Event::ArrowLeft)
+    {
+        state.edit_cursor = prev_boundary(buf, state.edit_cursor);
+        return {.consumed = true, .command = std::nullopt};
+    }
+
+    if (event == ftxui::Event::ArrowRight)
+    {
+        state.edit_cursor = next_boundary(buf, state.edit_cursor);
+        return {.consumed = true, .command = std::nullopt};
+    }
+
+    if (event == ftxui::Event::Home)
+    {
+        state.edit_cursor = 0;
+        return {.consumed = true, .command = std::nullopt};
+    }
+
+    if (event == ftxui::Event::End)
+    {
+        state.edit_cursor = buf.size();
         return {.consumed = true, .command = std::nullopt};
     }
 
     if (event.is_character())
     {
-        state.edit_buffer += event.character();
+        const std::string ch = event.character();
+        buf.insert(state.edit_cursor, ch);
+        state.edit_cursor += ch.size();
         return {.consumed = true, .command = std::nullopt};
     }
 
@@ -476,6 +516,7 @@ EventResult handle_date_picker(ViewState &state, const ftxui::Event &event, std:
     if (event == ftxui::Event::i)
     {
         state.edit_buffer = format_due_date(state.picker.view_epoch);
+        state.edit_cursor = state.edit_buffer.size();
         state.edit_field = EditField::DUE_DATE;
         state.mode = Mode::INSERT;
         return {.consumed = true, .command = std::nullopt};
@@ -544,6 +585,7 @@ std::expected<void, core::Error> apply_command(
                 state.mode = Mode::INSERT;
                 state.edit_field = EditField::TITLE;
                 state.edit_buffer.clear();
+                state.edit_cursor = 0;
                 return {};
             }
 
@@ -565,6 +607,7 @@ std::expected<void, core::Error> apply_command(
                 state.mode = Mode::INSERT;
                 state.edit_field = EditField::TITLE;
                 state.edit_buffer.clear();
+                state.edit_cursor = 0;
                 return {};
             }
 
@@ -680,6 +723,24 @@ std::expected<void, core::Error> apply_command(
                 {
                     return std::unexpected(res.error());
                 }
+                return {};
+            }
+
+            if constexpr (std::is_same_v<T, CmdBeginEditTitle>)
+            {
+                if (!state.cursor.is_valid())
+                {
+                    return {};
+                }
+                const auto title = pool.get_title(state.cursor);
+                if (!title)
+                {
+                    return std::unexpected(title.error());
+                }
+                state.edit_buffer = std::string{*title};
+                state.edit_cursor = c.cursor_at_end ? state.edit_buffer.size() : 0;
+                state.edit_field = EditField::TITLE;
+                state.mode = Mode::INSERT;
                 return {};
             }
 
